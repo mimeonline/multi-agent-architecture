@@ -1,127 +1,208 @@
-"""ReWOO demo.
+"""ReWOO: Strikte Phasentrennung — Planner, Worker, Solver laufen ohne Observation dazwischen.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangGraph, LangChain.
-Pattern idea: Der Agent plant Tool-Aufrufe vorab und löst erst nach gebündelter Beobachtung die Aufgabe."""
+Der Lernpunkt: Der Planner erzeugt ALLE Tool-Calls vorab als Variablen-DAG, Worker führt sie
+gesammelt aus, Solver kombiniert einmalig. Kein Reasoning-Schritt zwischen den Tools spart
+LLM-Calls über den gesamten Ablauf.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
-from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
-
-SLUG = 'rewoo'
+from ai_agent_patterns.demos.common import trace_demo, typed_state
 
 
-class DemoState(TypedDict):
+class ToolCall(TypedDict):
+    var: str        # z.B. "#E1"
+    tool: str       # Toolname
+    arg: str        # Argument (kann auf frueheres #Ei verweisen)
+
+
+class ReWOOState(TypedDict):
     prompt: str
-    plan: list[str]
-    observations: list[str]
-    answer: str
+    tool_plan: list[ToolCall]   # Variablen-DAG: alle Calls vorab geplant
+    observations: dict[str, str]  # #Ei -> Ergebnis
+    answer: str                   # einmaliger Solver-Output
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+# ---------------------------------------------------------------------------
+# Mock-Tools: kleine, reine Funktionen ohne Seiteneffekte
+# ---------------------------------------------------------------------------
+
+def search_docs(query: str) -> str:
+    return f"[search_docs] Dokumente zu '{query}': 3 Treffer gefunden, relevantester: Abschnitt 4.2"
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+def read_examples(topic: str) -> str:
+    return f"[read_examples] Beispiele fuer '{topic}': 2 Codebeispiele und 1 Diagramm"
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
+def summarize_constraints(context: str) -> str:
     return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
+        f"[summarize_constraints] Einschraenkungen aus '{context}': "
+        "max. Latenz 200 ms, kein externer Netzwerkzugriff"
     )
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+def compare_results(a: str, b: str) -> str:
+    return f"[compare_results] Vergleich: '{a[:30]}' vs '{b[:30]}' -> Ergebnis A bevorzugt"
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+_TOOL_REGISTRY = {
+    "search_docs": search_docs,
+    "read_examples": read_examples,
+    "summarize_constraints": summarize_constraints,
+    "compare_results": compare_results,
+}
+
+
+# ---------------------------------------------------------------------------
+# Planner: erzeugt Variablen-DAG aus dem Prompt — EINMALIG, vor jedem Tool-Call
+# ---------------------------------------------------------------------------
+
+def build_tool_plan(prompt: str) -> list[ToolCall]:
+    """Leitet aus dem Prompt einen DAG von Tool-Calls ab.
+
+    Spaeteren Calls koennen fruehe Variablen (#E1) als Argument referenzieren.
+    Der Planner denkt NICHT zwischen den Calls — das ist der Kern von ReWOO.
+    """
+    keywords = prompt.lower()
+    if "beispiel" in keywords or "demo" in keywords or "code" in keywords:
+        return [
+            {"var": "#E1", "tool": "search_docs",         "arg": prompt},
+            {"var": "#E2", "tool": "read_examples",        "arg": "#E1"},
+            {"var": "#E3", "tool": "summarize_constraints","arg": "#E1"},
+            {"var": "#E4", "tool": "compare_results",      "arg": "#E2, #E3"},
+        ]
+    return [
+        {"var": "#E1", "tool": "search_docs",         "arg": prompt},
+        {"var": "#E2", "tool": "summarize_constraints","arg": "#E1"},
+        {"var": "#E3", "tool": "read_examples",        "arg": prompt},
     ]
-    return {**state, "observations": observations}
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
+# ---------------------------------------------------------------------------
+# Worker: fuehrt ALLE Tool-Calls gesammelt aus (kein LLM dazwischen)
+# ---------------------------------------------------------------------------
+
+def _resolve_arg(arg: str, observations: dict[str, str]) -> str:
+    """Ersetzt #Ei-Referenzen durch echte Beobachtungswerte."""
+    for var, val in observations.items():
+        arg = arg.replace(var, val[:40])
+    return arg
 
 
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
+def run_all_tools(tool_plan: list[ToolCall]) -> dict[str, str]:
+    """Fuehrt jeden geplanten Tool-Call aus und sammelt Ergebnisse."""
+    observations: dict[str, str] = {}
+    for call in tool_plan:
+        resolved_arg = _resolve_arg(call["arg"], observations)
+        fn = _TOOL_REGISTRY.get(call["tool"])
+        result = fn(resolved_arg) if fn else f"[unbekanntes Tool: {call['tool']}]"
+        observations[call["var"]] = result
+    return observations
 
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
+
+# ---------------------------------------------------------------------------
+# Solver: kombiniert EINMALIG alle Beobachtungen zur Antwort
+# ---------------------------------------------------------------------------
+
+def solve(prompt: str, observations: dict[str, str]) -> str:
+    """Einmaliger Abschluss-Reasoning-Schritt mit allen Ergebnissen."""
+    obs_text = "; ".join(f"{k}={v[:50]}" for k, v in observations.items())
+    return (
+        f"Auf Basis aller Tool-Ergebnisse ({obs_text}): "
+        f"Antwort auf '{prompt[:60]}' erarbeitet ohne Zwischen-Reasoning."
+    )
 
 
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
+# ---------------------------------------------------------------------------
+# LangGraph-Nodes
+# ---------------------------------------------------------------------------
+
+def planner_node(state: ReWOOState) -> dict:
+    return {"tool_plan": build_tool_plan(state["prompt"]), "observations": {}, "answer": ""}
+
+
+def worker_node(state: ReWOOState) -> dict:
+    observations = run_all_tools(state["tool_plan"])
+    return {"observations": observations}
+
+
+def solver_node(state: ReWOOState) -> dict:
+    answer = solve(state["prompt"], state["observations"])
+    return {"answer": answer}
+
+
+# ---------------------------------------------------------------------------
+# run_with_langgraph / plain Python fallback
+# ---------------------------------------------------------------------------
+
+def run_with_langgraph(prompt: str) -> tuple[str, ReWOOState]:
+    initial: ReWOOState = {"prompt": prompt, "tool_plan": [], "observations": {}, "answer": ""}
+
     try:
         from langgraph.constants import END, START
         from langgraph.graph import StateGraph
     except ImportError:
-        return run_with_langchain(prompt)
+        state: ReWOOState = {**initial}
+        state.update(planner_node(state))
+        state.update(worker_node(state))
+        state.update(solver_node(state))
+        return "plain Python fallback (langgraph nicht installiert)", state
 
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
+    graph = StateGraph(ReWOOState)
+    graph.add_node("planner", planner_node)
+    graph.add_node("worker",  worker_node)
+    graph.add_node("solver",  solver_node)
+    graph.add_edge(START, "planner")
+    graph.add_edge("planner", "worker")
+    graph.add_edge("worker",  "solver")
+    graph.add_edge("solver",  END)
+
     app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
+    result: ReWOOState = typed_state(app.invoke(initial))
     return "LangGraph StateGraph", result
 
 
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
+# ---------------------------------------------------------------------------
+# Rendering
+# ---------------------------------------------------------------------------
+
+def render_result(runtime: str, state: ReWOOState) -> str:
+    plan_lines = [
+        f"  {c['var']} = {c['tool']}({c['arg']})"
+        for c in state["tool_plan"]
+    ]
+    obs_lines = [f"  {k}: {v}" for k, v in state["observations"].items()]
     return "\n".join(
         [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
+            "Pattern: ReWOO",
+            f"Runtime: {runtime}",
+            "",
+            "-- PLAN-PHASE (Variablen-DAG, kein LLM zwischen den Calls) --",
+            *plan_lines,
+            "",
+            "-- WORKER-PHASE (alle Tools gesammelt ausgefuehrt) --",
+            *obs_lines,
+            "",
+            "-- SOLVER-PHASE (einmaliger Abschluss-Reasoning-Schritt) --",
+            f"  {state['answer']}",
         ]
     )
 
 
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
+
 def run(prompt: str) -> str:
-    @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
+    @trace_demo("demo.rewoo")
+    def traced_run(user_prompt: str) -> tuple[str, ReWOOState]:
         return run_with_langgraph(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["run", "run_with_langgraph", "render_result"]

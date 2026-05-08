@@ -1,127 +1,151 @@
-"""Vector Memory demo.
+"""Vector Memory: Inhalte werden als Vektoren gespeichert und über Ähnlichkeit wiedergefunden.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangChain VectorStores, OpenAI Vector Stores.
-Pattern idea: Embedding-Suche ruft semantisch ähnliche Inhalte ab."""
+Der Lernpunkt: Ein Mini-VectorStore repräsentiert Dokumente als Wortmengen; Ähnlichkeit
+wird per Jaccard-Similarity berechnet. Top-k Retrieval speist ein RAG-Template — Wortlaut
+spielt keine Rolle, Bedeutung schon.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
 
-SLUG = 'vector-memory'
+SLUG = "vector-memory"
 
 
-class DemoState(TypedDict):
+class VectorDoc(TypedDict):
+    doc_id: str
+    text: str
+    word_set: set[str]
+
+
+class VectorState(TypedDict):
     prompt: str
-    plan: list[str]
-    observations: list[str]
+    vector_store: list[VectorDoc]
+    query_words: set[str]
+    retrieved_docs: list[tuple[float, VectorDoc]]  # (score, doc)
     answer: str
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+_VECTOR_STORE: list[VectorDoc] = [
+    {
+        "doc_id": "doc_1",
+        "text": "Python is a dynamically typed, interpreted programming language.",
+        "word_set": {"python", "dynamically", "typed", "interpreted", "programming", "language"},
+    },
+    {
+        "doc_id": "doc_2",
+        "text": "LangGraph builds stateful agent workflows as directed graphs.",
+        "word_set": {"langgraph", "builds", "stateful", "agent", "workflows", "directed", "graphs"},
+    },
+    {
+        "doc_id": "doc_3",
+        "text": "Retrieval-Augmented Generation (RAG) grounds LLM answers in retrieved documents.",
+        "word_set": {"retrieval", "augmented", "generation", "rag", "grounds", "llm", "answers", "retrieved", "documents"},
+    },
+    {
+        "doc_id": "doc_4",
+        "text": "Vector embeddings represent text as high-dimensional numerical vectors.",
+        "word_set": {"vector", "embeddings", "represent", "text", "high", "dimensional", "numerical", "vectors"},
+    },
+    {
+        "doc_id": "doc_5",
+        "text": "Episodic memory stores past task episodes for future reuse.",
+        "word_set": {"episodic", "memory", "stores", "past", "task", "episodes", "future", "reuse"},
+    },
+]
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+def _stopwords() -> set[str]:
+    return {"a", "an", "the", "in", "is", "of", "to", "do", "how", "what", "i", "for", "and", "or"}
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
-    )
+def _jaccard(a: set[str], b: set[str]) -> float:
+    if not a and not b:
+        return 0.0
+    return len(a & b) / len(a | b)
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+def embed_query(state: VectorState) -> VectorState:
+    """'Embed' the query as its word set (stand-in for a real embedding call)."""
+    stopwords = _stopwords()
+    words = {w.lower().strip("?.,!") for w in state["prompt"].split()} - stopwords
+    return {**state, "query_words": words}
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def retrieve_top_k(state: VectorState, k: int = 2) -> VectorState:
+    """Rank all documents by Jaccard similarity and return top-k."""
+    scored = [
+        (_jaccard(state["query_words"], doc["word_set"]), doc)
+        for doc in state["vector_store"]
     ]
-    return {**state, "observations": observations}
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return {**state, "retrieved_docs": scored[:k]}
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
+def generate_rag_answer(state: VectorState) -> VectorState:
+    """Insert retrieved doc texts into a RAG answer template."""
+    if not state["retrieved_docs"] or state["retrieved_docs"][0][0] == 0.0:
+        answer = f"No relevant documents found for: {state['prompt']}"
+    else:
+        context = "\n".join(
+            f"  [{score:.3f}] {doc['doc_id']}: {doc['text']}"
+            for score, doc in state["retrieved_docs"]
+        )
+        answer = f"RAG answer for \"{state['prompt']}\":\nContext:\n{context}\nSynthesis: see above docs."
+    return {**state, "answer": answer}
 
 
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
+def run_plain_python(prompt: str) -> VectorState:
+    state: VectorState = {
+        "prompt": prompt,
+        "vector_store": list(_VECTOR_STORE),
+        "query_words": set(),
+        "retrieved_docs": [],
+        "answer": "",
+    }
+    state = embed_query(state)
+    state = retrieve_top_k(state, k=2)
+    return generate_rag_answer(state)
 
 
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+def render_result(runtime: str, state: VectorState) -> str:
+    lines = [
+        "Pattern: Vector Memory",
+        f"Runtime: {runtime}",
+        f"Prompt: {state['prompt']}",
+        f"Query word-set (pseudo-embedding): {sorted(state['query_words'])}",
+        "",
+        f"Vector store ({len(state['vector_store'])} docs, similarity = Jaccard over word sets):",
+    ]
+    for doc in state["vector_store"]:
+        score = _jaccard(state["query_words"], doc["word_set"])
+        lines.append(f"  [{doc['doc_id']}] score={score:.3f}  words={sorted(doc['word_set'])}")
+    lines.append("")
+    lines.append("Top-2 retrieved:")
+    for score, doc in state["retrieved_docs"]:
+        lines.append(f"  score={score:.3f}  {doc['doc_id']}: {doc['text']}")
+    lines += ["", f"Answer:\n{state['answer']}"]
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
     @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langchain(user_prompt)
+    def traced_run(user_prompt: str) -> tuple[str, VectorState]:
+        return "plain Python", run_plain_python(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
 __all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
+    "VectorDoc",
+    "VectorState",
+    "embed_query",
+    "retrieve_top_k",
+    "generate_rag_answer",
+    "run_plain_python",
+    "render_result",
     "run",
 ]

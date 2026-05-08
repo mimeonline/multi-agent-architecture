@@ -1,0 +1,14 @@
+{
+  "include": ["code/src"],
+  "exclude": [
+    "**/__pycache__",
+    "code/.venv",
+    "webapp/node_modules",
+    "presentation/node_modules"
+  ],
+  "venvPath": "code",
+  "venv": ".venv",
+  "pythonVersion": "3.14",
+  "typeCheckingMode": "basic",
+  "extraPaths": ["code/src"]
+}

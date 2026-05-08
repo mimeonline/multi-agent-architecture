@@ -1,127 +1,189 @@
-"""Self-Consistency demo.
+"""Self-Consistency: Mehrere unabhängige Läufe erzeugen, die häufigste Antwort gewinnt.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangChain, LangGraph.
-Pattern idea: Mehrere unabhängige Antworten werden erzeugt und per Konsens zusammengeführt."""
+Der Lernpunkt: 5 unabhängige Antworten werden mit verschiedenen Heuristiken erzeugt, dann
+entscheidet ein `Counter` per Mehrheitsvotum. Korrekte Pfade konvergieren häufiger als
+zufällige Fehler — Robustheit durch Modellvarianz.
+"""
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import TypedDict
 
-from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
-
-SLUG = 'self-consistency'
+from ai_agent_patterns.demos.common import trace_demo, typed_state
 
 
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
+class Sample(TypedDict):
+    persona: str
+    reasoning: str
     answer: str
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+class SelfConsistencyState(TypedDict):
+    prompt: str
+    samples: list[Sample]           # alle 5 unabhaengigen Laeufe
+    vote_counts: dict[str, int]     # Antwort -> Stimmen
+    majority_answer: str
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+# ---------------------------------------------------------------------------
+# Sampling: 5 unabhaengige Laeufe mit verschiedenen Heuristiken/Personas
+# ---------------------------------------------------------------------------
+
+def _sample_pragmatist(prompt: str) -> Sample:
+    answer = "Ja" if len(prompt) % 2 == 0 else "Nein"
+    return {
+        "persona": "Pragmatist",
+        "reasoning": f"Bewertet Nutzen direkt: Prompt-Laenge {len(prompt)} -> {answer}",
+        "answer": answer,
+    }
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
-    )
+def _sample_analyst(prompt: str) -> Sample:
+    keywords = {"nicht", "kein", "nie", "schlecht", "falsch"}
+    negative = any(w in prompt.lower().split() for w in keywords)
+    answer = "Nein" if negative else "Ja"
+    return {
+        "persona": "Analyst",
+        "reasoning": f"Sucht negative Schluesselbegriffe: gefunden={negative} -> {answer}",
+        "answer": answer,
+    }
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+def _sample_optimist(prompt: str) -> Sample:
+    return {
+        "persona": "Optimist",
+        "reasoning": "Geht grundsaetzlich von positiver Antwort aus.",
+        "answer": "Ja",
+    }
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
-    ]
-    return {**state, "observations": observations}
+def _sample_skeptic(prompt: str) -> Sample:
+    uncertain = "?" in prompt or len(prompt.split()) < 5
+    answer = "Nein" if uncertain else "Ja"
+    return {
+        "persona": "Skeptiker",
+        "reasoning": f"Zweifelt bei kurzen oder unsicheren Prompts: unsicher={uncertain} -> {answer}",
+        "answer": answer,
+    }
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
+def _sample_statistician(prompt: str) -> Sample:
+    vowels = sum(1 for c in prompt.lower() if c in "aeiou")
+    answer = "Ja" if vowels % 3 != 0 else "Nein"
+    return {
+        "persona": "Statistiker",
+        "reasoning": f"Vokal-Heuristik: {vowels} Vokale, Modulo-3={vowels % 3} -> {answer}",
+        "answer": answer,
+    }
 
 
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
+_SAMPLERS = [
+    _sample_pragmatist,
+    _sample_analyst,
+    _sample_optimist,
+    _sample_skeptic,
+    _sample_statistician,
+]
 
 
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
+def generate_samples(prompt: str) -> list[Sample]:
+    """Fuehrt alle 5 unabhaengigen Sampling-Laeufe aus."""
+    return [sampler(prompt) for sampler in _SAMPLERS]
+
+
+# ---------------------------------------------------------------------------
+# Voting: Counter zaehlt Stimmen, Mehrheit gewinnt
+# ---------------------------------------------------------------------------
+
+def majority_vote(samples: list[Sample]) -> tuple[dict[str, int], str]:
+    counts: Counter[str] = Counter(s["answer"] for s in samples)
+    winner = counts.most_common(1)[0][0]
+    return dict(counts), winner
+
+
+# ---------------------------------------------------------------------------
+# LangGraph-Nodes
+# ---------------------------------------------------------------------------
+
+def sampling_node(state: SelfConsistencyState) -> dict:
+    samples = generate_samples(state["prompt"])
+    return {"samples": samples, "vote_counts": {}, "majority_answer": ""}
+
+
+def voting_node(state: SelfConsistencyState) -> dict:
+    counts, winner = majority_vote(state["samples"])
+    return {"vote_counts": counts, "majority_answer": winner}
+
+
+# ---------------------------------------------------------------------------
+# run_with_langgraph / plain Python fallback
+# ---------------------------------------------------------------------------
+
+def run_with_langgraph(prompt: str) -> tuple[str, SelfConsistencyState]:
+    initial: SelfConsistencyState = {
+        "prompt": prompt,
+        "samples": [],
+        "vote_counts": {},
+        "majority_answer": "",
+    }
+
     try:
         from langgraph.constants import END, START
         from langgraph.graph import StateGraph
     except ImportError:
-        return run_with_langchain(prompt)
+        state: SelfConsistencyState = {**initial}
+        state.update(sampling_node(state))
+        state.update(voting_node(state))
+        return "plain Python fallback (langgraph nicht installiert)", state
 
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
+    graph = StateGraph(SelfConsistencyState)
+    graph.add_node("sampling", sampling_node)
+    graph.add_node("voting",   voting_node)
+    graph.add_edge(START, "sampling")
+    graph.add_edge("sampling", "voting")
+    graph.add_edge("voting", END)
+
     app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
+    result: SelfConsistencyState = typed_state(app.invoke(initial))
     return "LangGraph StateGraph", result
 
 
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
+# ---------------------------------------------------------------------------
+# Rendering
+# ---------------------------------------------------------------------------
+
+def render_result(runtime: str, state: SelfConsistencyState) -> str:
+    sample_lines = [
+        f"  Sample {i + 1} [{s['persona']}]: {s['answer']} | {s['reasoning']}"
+        for i, s in enumerate(state["samples"])
+    ]
+    vote_line = ", ".join(f"{ans}: {n}" for ans, n in state["vote_counts"].items())
     return "\n".join(
         [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
+            "Pattern: Self-Consistency",
+            f"Runtime: {runtime}",
+            "",
+            "-- 5 UNABHAENGIGE SAMPLES --",
+            *sample_lines,
+            "",
+            f"-- VOTE-COUNTS -- {vote_line}",
+            f"-- MEHRHEITSENTSCHEID -> {state['majority_answer']} --",
         ]
     )
 
 
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
+
 def run(prompt: str) -> str:
-    @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
+    @trace_demo("demo.self-consistency")
+    def traced_run(user_prompt: str) -> tuple[str, SelfConsistencyState]:
         return run_with_langgraph(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["run", "run_with_langgraph", "render_result"]

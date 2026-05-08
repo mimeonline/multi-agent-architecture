@@ -1,127 +1,201 @@
-"""Tree of Thoughts demo.
+"""Tree of Thoughts: An Entscheidungspunkten mehrere Reasoning-Äste erzeugen, bewerten, besten vertiefen.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangGraph, LangChain.
-Pattern idea: Mehrere Reasoning-Pfade werden als Baum exploriert und bewertet."""
+Der Lernpunkt: 3 Strategien werden als Äste erzeugt, jeder bewertet — der beste Ast wird
+weiter ausgebaut, Sackgassen fallen früh raus. `scores.index(max(scores))` macht die Auswahl
+transparent.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
-from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
-
-SLUG = 'tree-of-thoughts'
+from ai_agent_patterns.demos.common import trace_demo, typed_state
 
 
-class DemoState(TypedDict):
+class Branch(TypedDict):
+    strategy: str       # Name des Ansatzes
+    reasoning: str      # Reasoning-Schritt in diesem Ast
+    score: int          # Bewertung 0-10
+    pruned: bool        # True = Sackgasse, frueh abgeschnitten
+
+
+class TreeOfThoughtsState(TypedDict):
     prompt: str
-    plan: list[str]
-    observations: list[str]
-    answer: str
+    branches: list[Branch]          # alle 3 Aeste mit Scores
+    best_branch: Branch             # Ast mit hoechstem Score
+    best_continuation: str          # weiterer Ausbaupfad des besten Asts
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+# ---------------------------------------------------------------------------
+# Branch-Generierung: 3 Strategien mit unterschiedlichen Ansaetzen
+# ---------------------------------------------------------------------------
+
+def _branch_decompose(prompt: str) -> Branch:
+    """Strategie A: Aufgabe zerlegen in Teilprobleme."""
+    complexity = len(prompt.split())
+    score = min(10, 4 + complexity // 5)
+    return {
+        "strategy": "Dekomposition",
+        "reasoning": (
+            f"Aufgabe '{prompt[:40]}' in {max(2, complexity // 4)} "
+            "Teilprobleme zerlegen und separat loesen."
+        ),
+        "score": score,
+        "pruned": score < 5,
+    }
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+def _branch_analogize(prompt: str) -> Branch:
+    """Strategie B: Analogie zu bekanntem Problem ziehen."""
+    has_comparison = any(w in prompt.lower() for w in ("verglichen", "aehnlich", "wie", "als"))
+    score = 7 if has_comparison else 4
+    return {
+        "strategy": "Analogie",
+        "reasoning": (
+            f"Analogie zu bekanntem Muster suchen (Treffer: {has_comparison}). "
+            "Loesung durch Uebertragung ableiten."
+        ),
+        "score": score,
+        "pruned": score < 5,
+    }
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
+def _branch_heuristic(prompt: str) -> Branch:
+    """Strategie C: Greedy-Heuristik, schnell zum besten naechsten Schritt."""
+    keywords = {"optimier", "maxim", "minim", "best", "schnell"}
+    match = any(k in prompt.lower() for k in keywords)
+    score = 8 if match else 5
+    return {
+        "strategy": "Greedy-Heuristik",
+        "reasoning": (
+            f"Optimierungsschluesselbegriff gefunden: {match}. "
+            "Greedy nimmt jeweils den lokal besten naechsten Schritt."
+        ),
+        "score": score,
+        "pruned": False,
+    }
+
+
+_BRANCH_GENERATORS = [_branch_decompose, _branch_analogize, _branch_heuristic]
+
+
+def generate_branches(prompt: str) -> list[Branch]:
+    """Erzeugt alle 3 Reasoning-Aeste unabhaengig voneinander."""
+    return [gen(prompt) for gen in _BRANCH_GENERATORS]
+
+
+# ---------------------------------------------------------------------------
+# Bewertung und Auswahl
+# ---------------------------------------------------------------------------
+
+def select_best(branches: list[Branch]) -> Branch:
+    return max(branches, key=lambda b: b["score"])
+
+
+def expand_branch(branch: Branch, prompt: str) -> str:
+    """Baut den besten Ast eine Tiefe weiter aus."""
     return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
+        f"[Vertiefung von '{branch['strategy']}'] "
+        f"Naechster Reasoning-Schritt fuer '{prompt[:50]}': "
+        f"Strategie pruefen, Zwischenergebnis validieren, Loesung verfeinern. "
+        f"Ausgangsscore {branch['score']}/10 rechtfertigt weiteres Aufloesen."
     )
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+# ---------------------------------------------------------------------------
+# LangGraph-Nodes
+# ---------------------------------------------------------------------------
+
+def branching_node(state: TreeOfThoughtsState) -> dict:
+    branches = generate_branches(state["prompt"])
+    return {"branches": branches, "best_branch": {}, "best_continuation": ""}
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
-    ]
-    return {**state, "observations": observations}
+def evaluation_node(state: TreeOfThoughtsState) -> dict:
+    best = select_best(state["branches"])
+    return {"best_branch": best}
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
+def expansion_node(state: TreeOfThoughtsState) -> dict:
+    continuation = expand_branch(state["best_branch"], state["prompt"])
+    return {"best_continuation": continuation}
 
 
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
+# ---------------------------------------------------------------------------
+# run_with_langgraph / plain Python fallback
+# ---------------------------------------------------------------------------
 
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
+def run_with_langgraph(prompt: str) -> tuple[str, TreeOfThoughtsState]:
+    initial: TreeOfThoughtsState = {
+        "prompt": prompt,
+        "branches": [],
+        "best_branch": {"strategy": "", "reasoning": "", "score": 0, "pruned": False},
+        "best_continuation": "",
+    }
 
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
     try:
         from langgraph.constants import END, START
         from langgraph.graph import StateGraph
     except ImportError:
-        return run_with_langchain(prompt)
+        state: TreeOfThoughtsState = {**initial}
+        state.update(branching_node(state))
+        state.update(evaluation_node(state))
+        state.update(expansion_node(state))
+        return "plain Python fallback (langgraph nicht installiert)", state
 
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
+    graph = StateGraph(TreeOfThoughtsState)
+    graph.add_node("branching",  branching_node)
+    graph.add_node("evaluation", evaluation_node)
+    graph.add_node("expansion",  expansion_node)
+    graph.add_edge(START, "branching")
+    graph.add_edge("branching",  "evaluation")
+    graph.add_edge("evaluation", "expansion")
+    graph.add_edge("expansion",  END)
+
     app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
+    result: TreeOfThoughtsState = typed_state(app.invoke(initial))
     return "LangGraph StateGraph", result
 
 
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
+# ---------------------------------------------------------------------------
+# Rendering
+# ---------------------------------------------------------------------------
+
+def render_result(runtime: str, state: TreeOfThoughtsState) -> str:
+    branch_lines = []
+    for b in state["branches"]:
+        pruned_tag = " [PRUNED - Sackgasse]" if b["pruned"] else ""
+        branch_lines.append(
+            f"  [{b['strategy']}] Score {b['score']}/10{pruned_tag}: {b['reasoning']}"
+        )
+    best = state["best_branch"]
     return "\n".join(
         [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
+            "Pattern: Tree of Thoughts",
+            f"Runtime: {runtime}",
+            "",
+            "-- BRANCHES (alle 3 Strategien mit Score) --",
+            *branch_lines,
+            "",
+            f"-- BESTER AST -> {best['strategy']} (Score {best['score']}/10) --",
+            "",
+            "-- EXPANSION (bester Ast weiter ausgebaut) --",
+            f"  {state['best_continuation']}",
         ]
     )
 
 
+# ---------------------------------------------------------------------------
+# Public entry point
+# ---------------------------------------------------------------------------
+
 def run(prompt: str) -> str:
-    @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
+    @trace_demo("demo.tree-of-thoughts")
+    def traced_run(user_prompt: str) -> tuple[str, TreeOfThoughtsState]:
         return run_with_langgraph(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["run", "run_with_langgraph", "render_result"]

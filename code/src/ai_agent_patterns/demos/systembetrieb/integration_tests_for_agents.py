@@ -1,127 +1,179 @@
-"""Integration Tests für Agents demo.
+"""Integration Tests für Agents: Reproduzierbare Szenarien prüfen das Agentensystem end-to-end.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: pytest, LangSmith datasets.
-Pattern idea: Agenten werden über realistische Szenarien mit Tools und State getestet."""
+Der Lernpunkt: Jedes Szenario definiert `(input, expected_action, mocks)` — das Harness
+vergleicht tatsächlichen Output mit Erwartung und meldet Pass/Fail. Gemockte Tools halten
+externe Abhängigkeiten heraus.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
 
-SLUG = 'integration-tests-for-agents'
-
-
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
-    answer: str
+SLUG = "integration-tests-for-agents"
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+class TestCase(TypedDict):
+    name: str
+    input: str
+    expected_action: str
+    mocks: dict[str, Callable[..., str]]
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+class TestResult(TypedDict):
+    name: str
+    input: str
+    expected_action: str
+    actual_action: str
+    passed: bool
+    detail: str
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
+class TestRunState(TypedDict):
+    cases: list[TestCase]
+    results: list[TestResult]
+    passed: int
+    failed: int
+    pass_rate: float
+
+
+# --- Mock tools used by agent ---
+
+def mock_search(query: str) -> str:
+    return f"[mock] search results for '{query[:30]}'"
+
+
+def mock_search_empty(query: str) -> str:
+    return "[mock] no results found"
+
+
+def mock_calculator(expression: str) -> str:
+    return f"[mock] calculated: {expression} = 42"
+
+
+def mock_send_email(to: str, subject: str) -> str:
+    return f"[mock] email sent to {to}"
+
+
+# --- Agent under test ---
+
+def agent_under_test(user_input: str, mocks: dict[str, Callable[..., str]]) -> str:
+    """Deterministic routing agent: picks an action based on keywords in the input."""
+    lower = user_input.lower()
+    if "calculate" in lower or "how much" in lower or "sum" in lower:
+        fn = mocks.get("calculator", mock_calculator)
+        fn(expression=user_input[:30])
+        return "call_calculator"
+    if "send" in lower or "email" in lower or "notify" in lower:
+        fn = mocks.get("send_email", mock_send_email)
+        fn(to="team@example.com", subject=user_input[:30])
+        return "call_send_email"
+    if "search" in lower or "find" in lower or "look up" in lower:
+        fn = mocks.get("search", mock_search)
+        result = fn(query=user_input[:30])
+        if "no results" in result:
+            return "call_search_empty"
+        return "call_search"
+    return "no_action"
+
+
+def run_test_case(case: TestCase) -> TestResult:
+    actual_action = agent_under_test(case["input"], case["mocks"])
+    passed = actual_action == case["expected_action"]
+    detail = "ok" if passed else f"expected '{case['expected_action']}', got '{actual_action}'"
+    return TestResult(
+        name=case["name"],
+        input=case["input"],
+        expected_action=case["expected_action"],
+        actual_action=actual_action,
+        passed=passed,
+        detail=detail,
     )
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
-
-
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def run_plain_python(prompt: str) -> tuple[str, TestRunState]:
+    cases: list[TestCase] = [
+        {
+            "name": "search_happy_path",
+            "input": f"Search for information about {prompt[:30]}",
+            "expected_action": "call_search",
+            "mocks": {"search": mock_search},
+        },
+        {
+            "name": "search_empty_results",
+            "input": "Find documents about quantum computing",
+            "expected_action": "call_search_empty",
+            "mocks": {"search": mock_search_empty},
+        },
+        {
+            "name": "calculator_invocation",
+            "input": "Calculate the total cost: 3 * 49.99",
+            "expected_action": "call_calculator",
+            "mocks": {"calculator": mock_calculator},
+        },
+        {
+            "name": "email_notification",
+            "input": "Send email to the team about the deployment",
+            "expected_action": "call_send_email",
+            "mocks": {"send_email": mock_send_email},
+        },
+        {
+            "name": "no_matching_action",
+            "input": "Hello, how are you?",
+            "expected_action": "no_action",
+            "mocks": {},
+        },
+        {
+            "name": "keyword_ambiguity_check",
+            "input": "Notify me when you find the sum",
+            # 'notify' triggers send_email, not calculator — tests routing priority
+            "expected_action": "call_send_email",
+            "mocks": {"send_email": mock_send_email},
+        },
     ]
-    return {**state, "observations": observations}
+
+    results = [run_test_case(case) for case in cases]
+    passed = sum(1 for r in results if r["passed"])
+    failed = len(results) - passed
+
+    state: TestRunState = {
+        "cases": cases,
+        "results": results,
+        "passed": passed,
+        "failed": failed,
+        "pass_rate": round(passed / len(results), 2) if results else 0.0,
+    }
+    return "plain Python test harness (mock injection)", state
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+def render_result(runtime: str, state: TestRunState) -> str:
+    lines = [
+        "Pattern: Integration Tests für Agents",
+        f"Runtime: {runtime}",
+        "Mechanic: test cases with mocks injected; harness compares actual_action to expected_action",
+        "",
+        "Test results:",
+    ]
+    for result in state["results"]:
+        status = "PASS" if result["passed"] else "FAIL"
+        lines.append(f"  [{status}] {result['name']}: {result['detail']}")
+    lines.extend([
+        "",
+        f"Summary: {state['passed']}/{state['passed'] + state['failed']} passed "
+        f"(pass rate: {state['pass_rate']:.0%})",
+    ])
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
     @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langchain(user_prompt)
+    def traced_run(user_prompt: str) -> tuple[str, TestRunState]:
+        return run_plain_python(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["agent_under_test", "run_test_case", "run_plain_python", "render_result", "run"]

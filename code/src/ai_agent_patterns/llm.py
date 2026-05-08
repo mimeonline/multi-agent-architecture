@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
-
 from .config import ModelConfig, pick_model_config
 
 
@@ -28,9 +27,12 @@ def init_langchain_model(config: ModelConfig | None = None):
 
         import os
 
+        from pydantic import SecretStr
+
+        github_token = os.getenv("GITHUB_TOKEN")
         return ChatOpenAI(
             model=config.model,
-            api_key=os.getenv("GITHUB_TOKEN"),
+            api_key=SecretStr(github_token) if github_token else None,
             base_url=os.getenv("GITHUB_MODELS_BASE_URL", "https://models.github.ai/inference"),
             temperature=config.temperature,
         )
@@ -54,6 +56,19 @@ def last_message_text(result: object) -> str:
         message = result["messages"][-1]
         return getattr(message, "content", str(message))
     return str(result)
+
+
+def invoke_model_text(model: object, messages: list[dict[str, str]]) -> str:
+    """Invoke any LangChain chat model and normalize the text response."""
+    response = model.invoke(messages)  # type: ignore[attr-defined]
+    content = getattr(response, "content", response)
+    if isinstance(content, list):
+        return " ".join(str(part) for part in content)
+    return str(content)
+
+
+def provider_error(config: ModelConfig, exc: BaseException) -> str:
+    return f"{config.provider}: {exc.__class__.__name__}: {exc}"
 
 
 def bullet_list(items: Iterable[str]) -> str:

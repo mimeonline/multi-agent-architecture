@@ -1,15 +1,15 @@
-"""Graph-based Orchestration demo with explicit state transitions.
+"""Graph-based Orchestration: Knoten und Kanten werden als Code modelliert — testbar, deterministisch, mit klar definierten Übergängen.
 
-This pattern models agents, tools, checks, and handoffs as graph nodes.
-The learning point is that the graph makes control flow visible: every edge names
-where the agent system can move next.
+Der Lernpunkt: Jeder Knoten ist eine Funktion, jede Kante ein expliziter Pfad im Graphen.
+`add_conditional_edges` macht sichtbar, wohin das System als nächstes gehen kann — kein
+implizites Routing via Prompt.
 """
 
 from __future__ import annotations
 
 from typing import TypedDict
 
-from ai_agent_patterns.demos.common import trace_demo
+from ai_agent_patterns.demos.common import trace_demo, typed_state
 
 
 class GraphState(TypedDict):
@@ -82,7 +82,7 @@ def run_with_langgraph(prompt: str) -> tuple[str, GraphState]:
     graph.add_edge("finish_node", END)
 
     app = graph.compile()
-    result = app.invoke({"request": prompt, "route": "", "draft": "", "review": "", "answer": ""})
+    result: GraphState = typed_state(app.invoke({"request": prompt, "route": "", "draft": "", "review": "", "answer": ""}))
     return "LangGraph StateGraph", result
 
 

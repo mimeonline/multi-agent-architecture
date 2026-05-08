@@ -1,15 +1,15 @@
-"""Handoff demo with an explicit control transfer.
+"""Handoff: Ein Agent erkennt, dass er nicht weiterführen sollte, und übergibt Kontrolle und Kontext vollständig.
 
-The first agent owns the intake turn. It decides which specialist should take over,
-packages only the relevant context, and then the selected specialist produces the answer.
-The important part is the transfer of control, not a central supervisor staying in the loop.
+Der Lernpunkt: Der übergebende Agent packt nur das relevante Kontext-Bundle — der Spezialist
+übernimmt ab da die volle Kontrolle. Kein Supervisor bleibt im Loop; die Übergabe ist
+einmalig und vollständig.
 """
 
 from __future__ import annotations
 
 from typing import TypedDict
 
-from ai_agent_patterns.demos.common import trace_demo
+from ai_agent_patterns.demos.common import trace_demo, typed_state
 
 
 class HandoffState(TypedDict):
@@ -67,7 +67,7 @@ def run_with_langgraph(prompt: str) -> tuple[str, HandoffState]:
     graph.add_edge("implementation_agent", END)
 
     app = graph.compile()
-    result = app.invoke({"request": prompt, "receiving_agent": "", "handoff_context": "", "answer": ""})
+    result: HandoffState = typed_state(app.invoke({"request": prompt, "receiving_agent": "", "handoff_context": "", "answer": ""}))
     return "LangGraph StateGraph", result
 
 

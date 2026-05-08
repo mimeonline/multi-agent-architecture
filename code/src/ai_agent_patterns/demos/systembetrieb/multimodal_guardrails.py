@@ -1,127 +1,142 @@
-"""Multimodal Guardrails demo.
+"""Multimodal Guardrails: Inputs und Outputs werden modalitätsspezifisch gefiltert, bevor sie den Agenten erreichen.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: OpenAI moderation, Azure AI Content Safety, AWS Bedrock Guardrails.
-Pattern idea: Text, Bild, Audio oder Video werden modalitätsspezifisch geprüft."""
+Der Lernpunkt: Jede Modalität (Text, Bild, Audio) hat eine eigene `policy`-Funktion, die
+`(allowed, reason)` zurückgibt. Ein Textfilter fängt kein hochgeladenes Bild — deshalb
+läuft jede Modalität durch ihren eigenen Guard.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
 
-SLUG = 'multimodal-guardrails'
+SLUG = "multimodal-guardrails"
 
-
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
-    answer: str
-
-
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+# Simulated PII patterns (real impl would use NER or regex)
+_PII_KEYWORDS = {"ssn", "credit card", "passport", "date of birth", "social security"}
+# Simulated NSFW markers
+_NSFW_MARKERS = {"nsfw", "explicit", "adult_content"}
+# Simulated audio policy violations
+_AUDIO_VIOLATIONS = {"hate_speech", "threat", "doxxing"}
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+class ModalityInput(TypedDict):
+    modality: str  # "text" | "image" | "audio"
+    content: str   # textual description / payload
+    metadata: dict[str, object]
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
+class GuardrailResult(TypedDict):
+    modality: str
+    content_preview: str
+    allowed: bool
+    policy: str
+    reason: str
+
+
+class GuardrailsState(TypedDict):
+    inputs: list[ModalityInput]
+    results: list[GuardrailResult]
+
+
+def text_policy(inp: ModalityInput) -> tuple[bool, str]:
+    content_lower = inp["content"].lower()
+    for keyword in _PII_KEYWORDS:
+        if keyword in content_lower:
+            return False, f"PII detected: '{keyword}'"
+    return True, "text policy passed"
+
+
+def image_policy(inp: ModalityInput) -> tuple[bool, str]:
+    tags = [str(t).lower() for t in list(inp["metadata"].get("tags", []))]  # type: ignore[arg-type]
+    for marker in _NSFW_MARKERS:
+        if marker in tags:
+            return False, f"NSFW marker detected: '{marker}'"
+    dimensions = inp["metadata"].get("dimensions")
+    if dimensions and isinstance(dimensions, dict):
+        width = dimensions.get("width", 0)
+        if isinstance(width, int) and width > 8000:
+            return False, f"image too large: width={width}px (max 8000)"
+    return True, "image policy passed"
+
+
+def audio_policy(inp: ModalityInput) -> tuple[bool, str]:
+    labels = [str(lbl).lower() for lbl in list(inp["metadata"].get("classifier_labels", []))]  # type: ignore[arg-type]
+    for violation in _AUDIO_VIOLATIONS:
+        if violation in labels:
+            return False, f"audio violation detected: '{violation}'"
+    duration_s = inp["metadata"].get("duration_s", 0)
+    if isinstance(duration_s, (int, float)) and duration_s > 600:
+        return False, f"audio too long: {duration_s}s (max 600s)"
+    return True, "audio policy passed"
+
+
+_POLICIES = {
+    "text": ("text_policy (no PII)", text_policy),
+    "image": ("image_policy (no NSFW)", image_policy),
+    "audio": ("audio_policy (no hate/threat)", audio_policy),
+}
+
+
+def apply_guardrail(inp: ModalityInput) -> GuardrailResult:
+    policy_name, policy_fn = _POLICIES.get(inp["modality"], ("unknown_policy", lambda _: (False, "unknown modality")))
+    allowed, reason = policy_fn(inp)
+    return GuardrailResult(
+        modality=inp["modality"],
+        content_preview=inp["content"][:50],
+        allowed=allowed,
+        policy=policy_name,
+        reason=reason,
     )
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
-
-
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def run_plain_python(prompt: str) -> tuple[str, GuardrailsState]:
+    inputs: list[ModalityInput] = [
+        # Allowed text
+        {"modality": "text", "content": f"Summarize this document: {prompt[:40]}", "metadata": {}},
+        # Blocked text (PII)
+        {"modality": "text", "content": "My SSN is 123-45-6789 and my credit card is 4111...", "metadata": {}},
+        # Allowed image
+        {"modality": "image", "content": "product screenshot", "metadata": {"tags": ["ui", "screenshot"], "dimensions": {"width": 1280, "height": 800}}},
+        # Blocked image (NSFW)
+        {"modality": "image", "content": "uploaded photo", "metadata": {"tags": ["nsfw", "adult_content"]}},
+        # Allowed audio
+        {"modality": "audio", "content": "customer support call recording", "metadata": {"duration_s": 120, "classifier_labels": ["question", "support"]}},
+        # Blocked audio (policy violation)
+        {"modality": "audio", "content": "uploaded audio clip", "metadata": {"duration_s": 45, "classifier_labels": ["hate_speech", "threat"]}},
     ]
-    return {**state, "observations": observations}
+
+    results = [apply_guardrail(inp) for inp in inputs]
+
+    state: GuardrailsState = {"inputs": inputs, "results": results}
+    return "plain Python per-modality policy functions", state
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+def render_result(runtime: str, state: GuardrailsState) -> str:
+    lines = [
+        "Pattern: Multimodal Guardrails",
+        f"Runtime: {runtime}",
+        "Mechanic: per-modality policy function; violations block input before agent sees it",
+        "",
+        "Guardrail results:",
+    ]
+    for result in state["results"]:
+        status = "ALLOW" if result["allowed"] else "BLOCK"
+        lines.append(
+            f"  [{status}] [{result['modality']:5}] {result['content_preview']!r} "
+            f"| {result['policy']} -> {result['reason']}"
+        )
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
     @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langchain(user_prompt)
+    def traced_run(user_prompt: str) -> tuple[str, GuardrailsState]:
+        return run_plain_python(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["apply_guardrail", "text_policy", "image_policy", "audio_policy", "run_plain_python", "render_result", "run"]

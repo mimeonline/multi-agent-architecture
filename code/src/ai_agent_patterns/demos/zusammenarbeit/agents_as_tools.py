@@ -1,127 +1,134 @@
-"""Agents-as-Tools demo.
+"""Agents-as-Tools: Hauptagent ruft Spezialisten als typisierte Tool-Funktionen auf.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: AWS Strands, OpenAI Agents SDK, LangGraph.
-Pattern idea: Ein Hauptagent ruft spezialisierte Agents über stabile Tool-Schnittstellen auf."""
+Der Lernpunkt: Die Kontrolle bleibt zentral — der Hauptagent wählt das Tool je nach
+Prompt-Inhalt, ruft `tools[name](sub_prompt)` auf und aggregiert das Ergebnis selbst.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
-from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
-
-SLUG = 'agents-as-tools'
+from ai_agent_patterns.demos.common import trace_demo, typed_state
 
 
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
+class AgentsAsToolsState(TypedDict):
+    request: str
+    selected_tool: str
+    sub_prompt: str
+    tool_result: str
     answer: str
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+# ---------------------------------------------------------------------------
+# Spezialist-Agents — hinter einer stabilen Funktionsschnittstelle gekapselt
+# ---------------------------------------------------------------------------
+
+def research_agent(sub_prompt: str) -> str:
+    """Simulierter Research-Specialist: sucht und fasst Fakten zusammen."""
+    return f"[research_agent] Quellen durchsucht und Fakten aggregiert für: '{sub_prompt}'"
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+def code_agent(sub_prompt: str) -> str:
+    """Simulierter Code-Specialist: übersetzt Anforderung in Implementierungsschritte."""
+    return f"[code_agent] Implementierungsschritte erstellt für: '{sub_prompt}'"
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
+def translate_agent(sub_prompt: str) -> str:
+    """Simulierter Translate-Specialist: erkennt Sprache und übersetzt den Text."""
+    return f"[translate_agent] Text erkannt und übersetzt: '{sub_prompt}'"
+
+
+# Tool-Registry: Name -> callable Spezialist
+TOOLS: dict[str, object] = {
+    "research": research_agent,
+    "code": code_agent,
+    "translate": translate_agent,
+}
+
+
+# ---------------------------------------------------------------------------
+# Hauptagent-Logik
+# ---------------------------------------------------------------------------
+
+def main_agent_select(state: AgentsAsToolsState) -> AgentsAsToolsState:
+    """Hauptagent wählt passendes Tool anhand von Schlüsselwörtern im Request."""
+    request = state["request"].lower()
+    if any(kw in request for kw in ("übersetze", "translate", "sprache", "language")):
+        tool = "translate"
+    elif any(kw in request for kw in ("code", "implementier", "funktion", "schreib")):
+        tool = "code"
+    else:
+        tool = "research"
+    sub_prompt = state["request"]
+    return {**state, "selected_tool": tool, "sub_prompt": sub_prompt}
+
+
+def main_agent_invoke(state: AgentsAsToolsState) -> AgentsAsToolsState:
+    """Hauptagent ruft das gewählte Tool auf — wie tools[name](sub_prompt)."""
+    tool_fn = TOOLS[state["selected_tool"]]  # type: ignore[operator]
+    result = tool_fn(state["sub_prompt"])  # type: ignore[call-arg]
+    return {**state, "tool_result": result}
+
+
+def main_agent_synthesize(state: AgentsAsToolsState) -> AgentsAsToolsState:
+    answer = (
+        f"Hauptagent delegierte an '{state['selected_tool']}' "
+        f"und erhielt: {state['tool_result']}"
     )
+    return {**state, "answer": answer}
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+# ---------------------------------------------------------------------------
+# Runtime
+# ---------------------------------------------------------------------------
 
-
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
-    ]
-    return {**state, "observations": observations}
-
-
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
+def run_with_langgraph(prompt: str) -> tuple[str, AgentsAsToolsState]:
+    init: AgentsAsToolsState = {
+        "request": prompt,
+        "selected_tool": "",
+        "sub_prompt": "",
+        "tool_result": "",
+        "answer": "",
+    }
     try:
         from langgraph.constants import END, START
         from langgraph.graph import StateGraph
     except ImportError:
-        return run_with_langchain(prompt)
+        state = main_agent_synthesize(main_agent_invoke(main_agent_select(init)))
+        return "plain Python fallback (langgraph not installed)", state
 
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
+    graph = StateGraph(AgentsAsToolsState)
+    graph.add_node("select", main_agent_select)
+    graph.add_node("invoke", main_agent_invoke)
+    graph.add_node("synthesize", main_agent_synthesize)
+    graph.add_edge(START, "select")
+    graph.add_edge("select", "invoke")
+    graph.add_edge("invoke", "synthesize")
     graph.add_edge("synthesize", END)
+
     app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
+    result: AgentsAsToolsState = typed_state(app.invoke(init))
     return "LangGraph StateGraph", result
 
 
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+def render_result(runtime: str, state: AgentsAsToolsState) -> str:
+    return "\n".join([
+        "Pattern: Agents-as-Tools",
+        f"Runtime: {runtime}",
+        f"Request: {state['request']}",
+        f"Selected tool: {state['selected_tool']}",
+        f"Tool result: {state['tool_result']}",
+        f"Answer: {state['answer']}",
+    ])
 
 
 def run(prompt: str) -> str:
-    @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
+    @trace_demo("demo.agents-as-tools")
+    def traced_run(user_prompt: str) -> tuple[str, AgentsAsToolsState]:
         return run_with_langgraph(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["run", "run_with_langgraph", "render_result"]

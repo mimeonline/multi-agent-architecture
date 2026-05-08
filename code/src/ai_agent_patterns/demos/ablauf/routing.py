@@ -1,14 +1,16 @@
-"""Routing demo with LangGraph conditional edges.
+"""Routing: Ein Klassifikator entscheidet anhand der Anfrage, welcher Spezialistenpfad sie bearbeitet.
 
-The router classifies the prompt, chooses a specialized node, and records a trace through the graph.
+Der Lernpunkt: Die Klassifikation landet in `state["route"]`, danach wählt ein `dict`-Lookup
+den passenden Handler. Fehlrouting ist im Trace sofort sichtbar — der gewählte Schlüssel steht
+im State.
 """
 
 from __future__ import annotations
 
 from typing import TypedDict
 
-from ai_agent_patterns.config import pick_model_config
-from ai_agent_patterns.llm import init_langchain_model, is_offline_model
+from ai_agent_patterns.config import ModelConfig, pick_model_config
+from ai_agent_patterns.llm import init_langchain_model, invoke_model_text, is_offline_model, provider_error
 
 
 class RoutingState(TypedDict):
@@ -46,18 +48,24 @@ def _choose_route(state: RoutingState) -> str:
     return state["route"]
 
 
-def _make_handler(route: str, model: object):
+def _make_handler(route: str, model: object, config: ModelConfig):
     def handler(state: RoutingState) -> dict[str, str | list[str]]:
         if is_offline_model(model):
             answer = f"Offline {route} handler selected. Next action: respond to `{state['prompt'][:80]}`."
         else:
-            response = model.invoke(
-                [
-                    {"role": "system", "content": SYSTEM_PROMPTS[route]},
-                    {"role": "user", "content": state["prompt"]},
-                ]
-            )
-            answer = response.content
+            try:
+                answer = invoke_model_text(
+                    model,
+                    [
+                        {"role": "system", "content": SYSTEM_PROMPTS[route]},
+                        {"role": "user", "content": state["prompt"]},
+                    ],
+                )
+            except Exception as exc:
+                answer = (
+                    f"Provider call failed ({provider_error(config, exc)}). "
+                    f"Fallback {route} handler selected for `{state['prompt'][:80]}`."
+                )
 
         return {
             "answer": answer,
@@ -81,9 +89,9 @@ def run(prompt: str) -> str:
 
     graph = StateGraph(RoutingState)
     graph.add_node("router", _router)
-    graph.add_node("engineering", _make_handler("engineering", model))
-    graph.add_node("writing", _make_handler("writing", model))
-    graph.add_node("general", _make_handler("general", model))
+    graph.add_node("engineering", _make_handler("engineering", model, config))
+    graph.add_node("writing", _make_handler("writing", model, config))
+    graph.add_node("general", _make_handler("general", model, config))
     graph.add_edge(START, "router")
     graph.add_conditional_edges(
         "router",

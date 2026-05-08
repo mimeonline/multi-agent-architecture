@@ -1,127 +1,122 @@
-"""Event-driven Choreography demo.
+"""Event-driven Choreography: Komponenten reagieren auf Events, kein zentraler Orchestrator steuert.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: AWS EventBridge, LangGraph with event runtime.
-Pattern idea: Komponenten reagieren auf Ereignisse statt auf zentrale Steuerung."""
+Der Lernpunkt: `bus.on("OrderPlaced", handler)` entkoppelt Publisher und Subscriber vollständig —
+das Koordinationsmuster entsteht aus dem Event-Log, nicht aus einem Controller. Neuen Reagenten
+einzubinden erfordert keine Änderung am bestehenden Code.
+"""
 
 from __future__ import annotations
 
+from collections import defaultdict
+from collections.abc import Callable
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
 
-SLUG = 'event-driven-choreography'
-
-
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
-    answer: str
+SLUG = "event-driven-choreography"
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+class EventRecord(TypedDict):
+    topic: str
+    payload: dict[str, object]
+    handler: str
+    emitted: str | None
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+class ChoreographyState(TypedDict):
+    initial_topic: str
+    event_log: list[EventRecord]
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
-    )
+class EventBus:
+    def __init__(self) -> None:
+        self._subscribers: dict[
+            str, list[tuple[str, Callable[[dict[str, object]], dict[str, object] | None]]]
+        ] = defaultdict(list)
+        self.log: list[EventRecord] = []
+
+    def subscribe(
+        self,
+        topic: str,
+        handler_name: str,
+        handler: Callable[[dict[str, object]], dict[str, object] | None],
+    ) -> None:
+        self._subscribers[topic].append((handler_name, handler))
+
+    def publish(self, topic: str, payload: dict[str, object]) -> None:
+        for handler_name, handler in self._subscribers.get(topic, []):
+            result = handler(payload)
+            emitted_topic: str | None = result.get("emit") if result else None  # type: ignore[union-attr]
+            self.log.append({"topic": topic, "payload": payload, "handler": handler_name, "emitted": emitted_topic})
+            if result and "emit" in result:
+                self.publish(result["emit"], result.get("payload", {}))  # type: ignore[arg-type]
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+# --- Service handlers (no shared state, no orchestrator) ---
+
+def validator_service(payload: dict[str, object]) -> dict[str, object] | None:
+    task_id = payload.get("task_id", "?")
+    return {"emit": "task.validated", "payload": {"task_id": task_id, "valid": True}}
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def enrichment_service(payload: dict[str, object]) -> dict[str, object] | None:
+    task_id = payload.get("task_id", "?")
+    return {"emit": "task.enriched", "payload": {"task_id": task_id, "tags": ["enriched", "ready"]}}
+
+
+def logger_service(payload: dict[str, object]) -> dict[str, object] | None:
+    # Passive observer: logs the event, emits nothing
+    return None
+
+
+def executor_service(payload: dict[str, object]) -> dict[str, object] | None:
+    task_id = payload.get("task_id", "?")
+    return {"emit": "task.completed", "payload": {"task_id": task_id, "status": "done"}}
+
+
+def run_plain_python(prompt: str) -> tuple[str, ChoreographyState]:
+    bus = EventBus()
+
+    # Wire subscriptions — no orchestrator knows all of these
+    bus.subscribe("task.created", "validator_service", validator_service)
+    bus.subscribe("task.created", "logger_service", logger_service)
+    bus.subscribe("task.validated", "enrichment_service", enrichment_service)
+    bus.subscribe("task.enriched", "executor_service", executor_service)
+    bus.subscribe("task.completed", "logger_service", logger_service)
+
+    # One publish triggers the entire choreography
+    bus.publish("task.created", {"task_id": "t-001", "description": prompt[:60]})
+
+    state: ChoreographyState = {
+        "initial_topic": "task.created",
+        "event_log": bus.log,
+    }
+    return "plain Python EventBus (no central orchestrator)", state
+
+
+def render_result(runtime: str, state: ChoreographyState) -> str:
+    lines = [
+        "Pattern: Event-driven Choreography",
+        f"Runtime: {runtime}",
+        "Mechanic: publish/subscribe — coordination emerges from events, not from a controller",
+        "",
+        f"Trigger: publish('{state['initial_topic']}')",
+        "",
+        "Event log (reactions in order):",
     ]
-    return {**state, "observations": observations}
-
-
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+    for i, record in enumerate(state["event_log"], 1):
+        emitted = f" -> emits '{record['emitted']}'" if record["emitted"] else " (no further emission)"
+        lines.append(f"  {i}. [{record['topic']}] {record['handler']}{emitted}")
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
     @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langgraph(user_prompt)
+    def traced_run(user_prompt: str) -> tuple[str, ChoreographyState]:
+        return run_plain_python(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["EventBus", "run_plain_python", "render_result", "run"]

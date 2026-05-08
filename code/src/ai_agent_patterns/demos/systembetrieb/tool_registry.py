@@ -1,127 +1,184 @@
-"""Tool Registry demo.
+"""Tool Registry: Tools werden zentral mit Schema, Scopes und Owner katalogisiert.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangChain, LangGraph.
-Pattern idea: Tools werden mit Schema, Beschreibung und Berechtigungen katalogisiert."""
+Der Lernpunkt: Statt Tools im Agent zu hardcoden, hält eine `ToolRegistry`-Klasse den
+Katalog. `for_task(prompt)` filtert per Keyword-Match, `for_scope(scope)` per Berechtigung
+— dieselbe Quelle liefert je nach Anfrage unterschiedliche Sichten.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
 
-SLUG = 'tool-registry'
+SLUG = "tool-registry"
 
 
-class DemoState(TypedDict):
+class RegistryEntry(TypedDict):
+    name: str
+    description: str
+    keywords: list[str]
+    scopes: list[str]
+    owner: str
+
+
+class ToolRegistryState(TypedDict):
     prompt: str
-    plan: list[str]
-    observations: list[str]
+    active_scope: str
+    task_matches: list[RegistryEntry]
+    scope_matches: list[RegistryEntry]
     answer: str
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+class ToolRegistry:
+    """Central catalog for agent tools, supporting lookup by task or scope."""
 
+    def __init__(self) -> None:
+        self._entries: list[RegistryEntry] = []
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+    def add(self, name: str, description: str, keywords: list[str], scopes: list[str], owner: str) -> None:
+        self._entries.append(
+            {
+                "name": name,
+                "description": description,
+                "keywords": keywords,
+                "scopes": scopes,
+                "owner": owner,
+            }
+        )
 
-
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
-    )
-
-
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
-
-
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
-    ]
-    return {**state, "observations": observations}
-
-
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
+    def for_task(self, prompt: str) -> list[RegistryEntry]:
+        """Return tools whose keywords overlap with the prompt tokens."""
+        tokens = {t.lower().strip("?.,!") for t in prompt.split()}
+        return [
+            entry for entry in self._entries
+            if tokens & {kw.lower() for kw in entry["keywords"]}
         ]
+
+    def for_scope(self, scope: str) -> list[RegistryEntry]:
+        """Return tools available in the given scope."""
+        return [entry for entry in self._entries if scope in entry["scopes"]]
+
+    def all_tools(self) -> list[RegistryEntry]:
+        return list(self._entries)
+
+
+def _build_registry() -> ToolRegistry:
+    reg = ToolRegistry()
+    reg.add("search_web",        "Search the internet for information.",     ["search", "web", "find", "lookup"],           ["public", "internal"],             "platform-team")
+    reg.add("read_database",     "Run a SELECT query against the DB.",        ["database", "db", "query", "select", "read"], ["internal", "data"],               "data-team")
+    reg.add("write_database",    "Execute INSERT/UPDATE statements.",         ["database", "db", "write", "insert", "update"],["internal", "data", "admin"],     "data-team")
+    reg.add("send_email",        "Send an email to a recipient.",             ["email", "send", "notify", "message"],        ["internal", "comms"],              "ops-team")
+    reg.add("generate_report",   "Produce a PDF or CSV report.",              ["report", "export", "generate", "pdf", "csv"],["internal", "analytics"],          "analytics-team")
+    reg.add("delete_record",     "Permanently delete a DB record.",           ["delete", "remove", "purge"],                 ["admin"],                          "admin-team")
+    reg.add("list_users",        "List all system users.",                    ["user", "users", "list", "accounts"],         ["internal", "admin"],              "platform-team")
+    reg.add("charge_customer",   "Charge a customer via payment gateway.",    ["charge", "payment", "billing", "invoice"],   ["billing", "admin"],               "billing-team")
+    return reg
+
+
+_SCOPE_KEYWORDS: dict[str, str] = {
+    "public": "public",
+    "internal": "internal",
+    "admin": "admin",
+    "analytics": "analytics",
+    "billing": "billing",
+    "comms": "comms",
+    "data": "data",
+}
+
+
+def detect_active_scope(state: ToolRegistryState) -> ToolRegistryState:
+    """Detect the requested scope from the prompt."""
+    tokens = [t.lower().strip("?.,!") for t in state["prompt"].split()]
+    for token in tokens:
+        scope = _SCOPE_KEYWORDS.get(token)
+        if scope:
+            return {**state, "active_scope": scope}
+    return {**state, "active_scope": "internal"}  # default
+
+
+def lookup_by_task(state: ToolRegistryState, registry: ToolRegistry) -> ToolRegistryState:
+    """Find tools whose keywords match the prompt."""
+    matches = registry.for_task(state["prompt"])
+    return {**state, "task_matches": matches}
+
+
+def lookup_by_scope(state: ToolRegistryState, registry: ToolRegistry) -> ToolRegistryState:
+    """Find tools visible in the active scope."""
+    matches = registry.for_scope(state["active_scope"])
+    return {**state, "scope_matches": matches}
+
+
+def compose_registry_answer(state: ToolRegistryState) -> ToolRegistryState:
+    task_names = [t["name"] for t in state["task_matches"]]
+    scope_names = [t["name"] for t in state["scope_matches"]]
+    answer = (
+        f"Tool Registry: for_task() -> {task_names or 'none'}; "
+        f"for_scope('{state['active_scope']}') -> {scope_names or 'none'}"
     )
+    return {**state, "answer": answer}
+
+
+def run_plain_python(prompt: str) -> ToolRegistryState:
+    registry = _build_registry()
+    state: ToolRegistryState = {
+        "prompt": prompt,
+        "active_scope": "",
+        "task_matches": [],
+        "scope_matches": [],
+        "answer": "",
+    }
+    state = detect_active_scope(state)
+    state = lookup_by_task(state, registry)
+    state = lookup_by_scope(state, registry)
+    state = compose_registry_answer(state)
+    # Attach full registry snapshot for render
+    state["_all_tools"] = registry.all_tools()  # type: ignore[typeddict-unknown-key]
+    return state
+
+
+def render_result(runtime: str, state: ToolRegistryState) -> str:
+    all_tools = state.get("_all_tools", [])  # type: ignore[attr-defined]
+    lines = [
+        "Pattern: Tool Registry",
+        f"Runtime: {runtime}",
+        f"Prompt: {state['prompt']}",
+        "",
+        f"Registry ({len(all_tools)} tools):",
+    ]
+    for entry in all_tools:
+        lines.append(
+            f"  {entry['name']:20s} scopes={entry['scopes']}  owner={entry['owner']}  "
+            f"keywords={entry['keywords']}"
+        )
+    lines += [
+        "",
+        f"for_task(prompt) -> {[t['name'] for t in state['task_matches']] or 'none'}",
+        f"for_scope('{state['active_scope']}') -> {[t['name'] for t in state['scope_matches']] or 'none'}",
+        "",
+        f"Answer: {state['answer']}",
+    ]
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
     @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langgraph(user_prompt)
+    def traced_run(user_prompt: str) -> tuple[str, ToolRegistryState]:
+        return "plain Python", run_plain_python(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
 __all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
+    "RegistryEntry",
+    "ToolRegistryState",
+    "ToolRegistry",
+    "detect_active_scope",
+    "lookup_by_task",
+    "lookup_by_scope",
+    "compose_registry_answer",
+    "run_plain_python",
+    "render_result",
     "run",
 ]

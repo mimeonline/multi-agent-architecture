@@ -1,127 +1,132 @@
-"""Token / Cost Tracking demo.
+"""Token / Cost Tracking: Pro Aufruf werden Tokens und Kosten aggregiert und gegen ein Budget verglichen.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangSmith, Provider Usage APIs.
-Pattern idea: Token und Kosten werden pro Run, Agent oder Workflow gemessen."""
+Der Lernpunkt: Eine Preistabelle konvertiert Token-Counts zu Dollar; `total_cost` akkumuliert
+über alle Schritte. Überschreitet der Lauf das Budget, wird abgebrochen — bevor eine fehlerhafte
+Schleife das Tagesbudget frisst.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
 
-SLUG = 'token-cost-tracking'
+SLUG = "token-cost-tracking"
 
+# Pricing table: (provider, model) -> ($ per 1k input tokens, $ per 1k output tokens)
+PRICING: dict[tuple[str, str], tuple[float, float]] = {
+    ("anthropic", "claude-3-5-haiku"): (0.0008, 0.004),
+    ("anthropic", "claude-sonnet-4-5"): (0.003, 0.015),
+    ("openai", "gpt-4o-mini"): (0.00015, 0.0006),
+    ("openai", "gpt-4o"): (0.005, 0.015),
+}
 
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
-    answer: str
-
-
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+BUDGET_USD = 0.10
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+class StepUsage(TypedDict):
+    step: str
+    provider: str
+    model: str
+    input_tokens: int
+    output_tokens: int
+    cost_usd: float
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
+class CostState(TypedDict):
+    steps: list[StepUsage]
+    total_input_tokens: int
+    total_output_tokens: int
+    total_cost_usd: float
+    budget_usd: float
+    over_budget: bool
+
+
+def compute_cost(provider: str, model: str, input_tokens: int, output_tokens: int) -> float:
+    price_in, price_out = PRICING.get((provider, model), (0.0, 0.0))
+    return round(input_tokens / 1000 * price_in + output_tokens / 1000 * price_out, 6)
+
+
+def record_step(
+    step: str,
+    provider: str,
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+) -> StepUsage:
+    cost = compute_cost(provider, model, input_tokens, output_tokens)
+    return StepUsage(
+        step=step,
+        provider=provider,
+        model=model,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cost_usd=cost,
     )
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
-
-
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def run_plain_python(prompt: str) -> tuple[str, CostState]:
+    # Simulate a multi-step agent workflow with mixed models
+    steps = [
+        record_step("intent_classification", "openai", "gpt-4o-mini", input_tokens=312, output_tokens=28),
+        record_step("knowledge_retrieval", "anthropic", "claude-3-5-haiku", input_tokens=1800, output_tokens=420),
+        record_step("answer_generation", "anthropic", "claude-sonnet-4-5", input_tokens=2400, output_tokens=860),
+        record_step("quality_check", "openai", "gpt-4o-mini", input_tokens=980, output_tokens=64),
+        record_step("final_formatting", "anthropic", "claude-3-5-haiku", input_tokens=540, output_tokens=210),
     ]
-    return {**state, "observations": observations}
+
+    total_in = sum(s["input_tokens"] for s in steps)
+    total_out = sum(s["output_tokens"] for s in steps)
+    total_cost = round(sum(s["cost_usd"] for s in steps), 6)
+
+    state: CostState = {
+        "steps": steps,
+        "total_input_tokens": total_in,
+        "total_output_tokens": total_out,
+        "total_cost_usd": total_cost,
+        "budget_usd": BUDGET_USD,
+        "over_budget": total_cost > BUDGET_USD,
+    }
+    return "plain Python cost tracker (pricing table)", state
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+def render_result(runtime: str, state: CostState) -> str:
+    lines = [
+        "Pattern: Token / Cost Tracking",
+        f"Runtime: {runtime}",
+        "Mechanic: per-step token counts * pricing table -> cumulative cost vs budget",
+        "",
+        "Pricing table ($/1k tokens):",
+        *[
+            f"  {provider}/{model}: in=${price_in:.5f}  out=${price_out:.5f}"
+            for (provider, model), (price_in, price_out) in PRICING.items()
+        ],
+        "",
+        "Step breakdown:",
+        f"  {'Step':<25} {'Model':<25} {'In':>6} {'Out':>6} {'Cost':>10}",
+        f"  {'-'*25} {'-'*25} {'-'*6} {'-'*6} {'-'*10}",
+    ]
+    for s in state["steps"]:
+        model_str = f"{s['provider']}/{s['model']}"
+        lines.append(
+            f"  {s['step']:<25} {model_str:<25} {s['input_tokens']:>6} {s['output_tokens']:>6} ${s['cost_usd']:>9.6f}"
+        )
+    lines.extend([
+        f"  {'-'*75}",
+        f"  {'TOTAL':<51} {state['total_input_tokens']:>6} {state['total_output_tokens']:>6} ${state['total_cost_usd']:>9.6f}",
+        "",
+        f"Budget: ${state['budget_usd']:.4f}  |  Over budget: {state['over_budget']}",
+    ])
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
     @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langchain(user_prompt)
+    def traced_run(user_prompt: str) -> tuple[str, CostState]:
+        return run_plain_python(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["PRICING", "compute_cost", "record_step", "run_plain_python", "render_result", "run"]

@@ -1,127 +1,133 @@
-"""Distributed Tracing demo.
+"""Distributed Tracing: Jeder Lauf wird als Baum verschachtelter Spans mit Latenz und Kontext aufgezeichnet.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangSmith, OpenTelemetry.
-Pattern idea: Agentenläufe und Tool-Aufrufe werden als zusammenhängende Traces sichtbar."""
+Der Lernpunkt: `child spans carry parent context` — ein Context-Manager öffnet einen benannten
+Span, jeder Kindspan erbt die Parent-ID. Einrückungstiefe im Ausdruck spiegelt die Nesting-Tiefe
+direkt wider.
+"""
 
 from __future__ import annotations
 
+import time
+from contextlib import contextmanager
+from collections.abc import Generator
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
 
-SLUG = 'distributed-tracing'
-
-
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
-    answer: str
+SLUG = "distributed-tracing"
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+class SpanRecord(TypedDict):
+    name: str
+    depth: int
+    duration_ms: float
+    children: list["SpanRecord"]
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+class TracingState(TypedDict):
+    root_span: SpanRecord
+    flat_log: list[str]
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
-    )
+class Span:
+    def __init__(self, name: str, depth: int) -> None:
+        self.name = name
+        self.depth = depth
+        self.start = time.perf_counter()
+        self.children: list[SpanRecord] = []
+
+    def finish(self) -> SpanRecord:
+        duration_ms = (time.perf_counter() - self.start) * 1000
+        return SpanRecord(name=self.name, depth=self.depth, duration_ms=round(duration_ms, 2), children=self.children)
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+class Tracer:
+    def __init__(self) -> None:
+        self._stack: list[Span] = []
+        self.root: SpanRecord | None = None
+
+    @contextmanager
+    def span(self, name: str) -> Generator[None, None, None]:
+        depth = len(self._stack)
+        s = Span(name, depth)
+        self._stack.append(s)
+        try:
+            yield
+        finally:
+            record = s.finish()
+            self._stack.pop()
+            if self._stack:
+                self._stack[-1].children.append(record)
+            else:
+                self.root = record
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def _mock_sleep(ms: float) -> None:
+    """Simulate work without actually sleeping (fast demo)."""
+    # We do a tight loop to burn a tiny bit of real time so durations differ
+    end = time.perf_counter() + ms / 1000
+    while time.perf_counter() < end:
+        pass
+
+
+def _flatten(span: SpanRecord, lines: list[str]) -> None:
+    indent = "  " * span["depth"]
+    lines.append(f"{indent}[{span['name']}] {span['duration_ms']:.2f}ms")
+    for child in span["children"]:
+        _flatten(child, lines)
+
+
+def run_plain_python(prompt: str) -> tuple[str, TracingState]:
+    tracer = Tracer()
+
+    with tracer.span("agent.run"):
+        _mock_sleep(2)
+        with tracer.span("tool.search"):
+            _mock_sleep(1)
+            with tracer.span("db.query"):
+                _mock_sleep(0.5)
+            with tracer.span("db.fetch_rows"):
+                _mock_sleep(0.5)
+        with tracer.span("tool.summarize"):
+            _mock_sleep(1)
+            with tracer.span("llm.tokenize"):
+                _mock_sleep(0.2)
+            with tracer.span("llm.infer"):
+                _mock_sleep(0.5)
+        with tracer.span("response.format"):
+            _mock_sleep(0.3)
+
+    assert tracer.root is not None
+    flat: list[str] = []
+    _flatten(tracer.root, flat)
+
+    state: TracingState = {
+        "root_span": tracer.root,
+        "flat_log": flat,
+    }
+    return "plain Python Tracer (contextmanager spans)", state
+
+
+def render_result(runtime: str, state: TracingState) -> str:
+    root = state["root_span"]
+    lines = [
+        "Pattern: Distributed Tracing",
+        f"Runtime: {runtime}",
+        "Mechanic: nested span() context managers record name, depth, latency; tree shows call hierarchy",
+        "",
+        f"Trace tree (root: {root['name']}, total: {root['duration_ms']:.2f}ms):",
+        *[f"  {line}" for line in state["flat_log"]],
     ]
-    return {**state, "observations": observations}
-
-
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
     @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langchain(user_prompt)
+    def traced_run(user_prompt: str) -> tuple[str, TracingState]:
+        return run_plain_python(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["Tracer", "run_plain_python", "render_result", "run"]

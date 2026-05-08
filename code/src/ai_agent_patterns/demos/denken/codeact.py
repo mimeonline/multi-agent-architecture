@@ -1,7 +1,8 @@
-"""CodeAct demo with a restricted local sandbox.
+"""CodeAct: Der Agent schreibt Python als primäre Handlung statt fixe Tool-Funktionen zu serialisieren.
 
-The code translates a prompt into a small Python program, validates the AST against an allowlist,
-executes it with safe builtins only, and explains the result.
+Der Lernpunkt: Ein AST-Pre-Scan prüft den generierten Code gegen eine Allowlist, bevor `exec()`
+ihn in einer minimalen `globals`-Umgebung ausführt — Sandbox-Sicherheit und Reproduzierbarkeit
+in einer Funktion.
 """
 
 from __future__ import annotations

@@ -1,127 +1,135 @@
-"""Blackboard demo.
+"""Blackboard: Mehrere Spezialisten lesen und schreiben in eine gemeinsame Zustandsfläche.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangGraph, AWS Strands.
-Pattern idea: Agents koordinieren indirekt über eine gemeinsame Zustandsfläche."""
+Der Lernpunkt: Keine direkten Agent-zu-Agent-Aufrufe — stattdessen ein zentrales
+`Blackboard`-Dict mit `hypotheses`, `evidence` und `synthesis`. Wer eine Bedingung
+erfüllt, übernimmt den nächsten Schritt.
+"""
 
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import TypedDict, cast
 
-from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
+from ai_agent_patterns.demos.common import trace_demo, typed_state
 
-SLUG = 'blackboard'
+# ---------------------------------------------------------------------------
+# Blackboard — das zentrale geteilte State-Dict
+# ---------------------------------------------------------------------------
 
 
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
+class Blackboard(TypedDict):
+    hypotheses: list[str]
+    evidence: list[str]
+    synthesis: str
+
+
+class BlackboardState(TypedDict):
+    request: str
+    blackboard: Blackboard
     answer: str
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+# ---------------------------------------------------------------------------
+# Spezialist-Agents — lesen und schreiben auf das Blackboard
+# ---------------------------------------------------------------------------
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
-
-
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
-    )
-
-
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
-
-
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def hypothesis_agent(state: BlackboardState) -> BlackboardState:
+    """Liest den Request, schreibt erste Hypothesen auf das Blackboard."""
+    bb = dict(state["blackboard"])
+    bb["hypotheses"] = [
+        f"Hypothese A: '{state['request']}' lässt sich durch Ansatz X lösen.",
+        f"Hypothese B: '{state['request']}' erfordert Ansatz Y.",
     ]
-    return {**state, "observations": observations}
+    return {**state, "blackboard": bb}  # type: ignore[typeddict-item]
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
+def evidence_agent(state: BlackboardState) -> BlackboardState:
+    """Liest Hypothesen vom Blackboard, schreibt Belege zurück."""
+    bb = dict(state["blackboard"])
+    evidence = []
+    for i, hyp in enumerate(cast(list[str], bb["hypotheses"]), start=1):
+        evidence.append(f"Beleg {i}: Daten unterstützen — {hyp[:60]}…")
+    bb["evidence"] = evidence
+    return {**state, "blackboard": bb}  # type: ignore[typeddict-item]
 
 
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
+def synthesis_agent(state: BlackboardState) -> BlackboardState:
+    """Liest Hypothesen + Belege, schreibt finale Synthese auf das Blackboard."""
+    bb = dict(state["blackboard"])
+    hyp_count = len(cast(list[str], bb["hypotheses"]))
+    ev_count = len(cast(list[str], bb["evidence"]))
+    bb["synthesis"] = (
+        f"Synthese aus {hyp_count} Hypothesen und {ev_count} Belegen: "
+        f"Ansatz X dominiert für '{state['request']}'."
+    )
+    answer = (
+        f"Blackboard nach 3 Agenten:\n"
+        f"  hypotheses: {bb['hypotheses']}\n"
+        f"  evidence:   {bb['evidence']}\n"
+        f"  synthesis:  {bb['synthesis']}"
+    )
+    return {**state, "blackboard": bb, "answer": answer}  # type: ignore[typeddict-item]
 
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
+
+# ---------------------------------------------------------------------------
+# Runtime
+# ---------------------------------------------------------------------------
 
 
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
+def _empty_blackboard() -> Blackboard:
+    return {"hypotheses": [], "evidence": [], "synthesis": ""}
+
+
+def run_with_langgraph(prompt: str) -> tuple[str, BlackboardState]:
+    init: BlackboardState = {
+        "request": prompt,
+        "blackboard": _empty_blackboard(),
+        "answer": "",
+    }
     try:
         from langgraph.constants import END, START
         from langgraph.graph import StateGraph
     except ImportError:
-        return run_with_langchain(prompt)
+        state = synthesis_agent(evidence_agent(hypothesis_agent(init)))
+        return "plain Python fallback (langgraph not installed)", state
 
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
+    graph = StateGraph(BlackboardState)
+    graph.add_node("hypothesis_agent", hypothesis_agent)
+    graph.add_node("evidence_agent", evidence_agent)
+    graph.add_node("synthesis_agent", synthesis_agent)
+    graph.add_edge(START, "hypothesis_agent")
+    graph.add_edge("hypothesis_agent", "evidence_agent")
+    graph.add_edge("evidence_agent", "synthesis_agent")
+    graph.add_edge("synthesis_agent", END)
+
     app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
+    result: BlackboardState = typed_state(app.invoke(init))
+    return "LangGraph StateGraph", cast(BlackboardState, result)
 
 
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
+def render_result(runtime: str, state: BlackboardState) -> str:
+    bb = state["blackboard"]
     return "\n".join(
         [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
+            "Pattern: Blackboard",
+            f"Runtime: {runtime}",
+            f"Request: {state['request']}",
+            "Blackboard state:",
+            f"  hypotheses: {bb['hypotheses']}",
+            f"  evidence:   {bb['evidence']}",
+            f"  synthesis:  {bb['synthesis']}",
+            f"Answer: {state['answer']}",
         ]
     )
 
 
 def run(prompt: str) -> str:
-    @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
+    @trace_demo("demo.blackboard")
+    def traced_run(user_prompt: str) -> tuple[str, BlackboardState]:
         return run_with_langgraph(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["run", "run_with_langgraph", "render_result"]

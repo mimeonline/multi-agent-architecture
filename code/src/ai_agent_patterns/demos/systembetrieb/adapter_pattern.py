@@ -1,127 +1,145 @@
-"""Adapter Pattern demo.
+"""Adapter Pattern: Uneinheitliche externe APIs werden hinter einer stabilen Tool-Schnittstelle versteckt.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangChain Tools, Custom adapters.
-Pattern idea: Uneinheitliche APIs werden in stabile Agent-Tools übersetzt."""
+Der Lernpunkt: Zwei Backends (`JiraAPI.create`, `LinearAPI.submit`) liegen hinter dem
+einen `TicketAdapter.agent_create_ticket(title, body)`. Der Agent kennt nur die
+Adapter-Signatur — das Backend ist austauschbar, ohne den Agent anzufassen.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
 
-SLUG = 'adapter-pattern'
+SLUG = "adapter-pattern"
 
 
-class DemoState(TypedDict):
+# --- External API A: Jira-style ---
+
+class JiraAPI:
+    """External API A: expects title + body as separate keyword args."""
+
+    @staticmethod
+    def create(title: str, body: str) -> dict[str, str]:
+        return {"system": "Jira", "id": f"JIRA-{abs(hash(title)) % 9000 + 1000}", "title": title, "body": body}
+
+
+# --- External API B: Linear-style ---
+
+class LinearAPI:
+    """External API B: expects a single payload dict."""
+
+    @staticmethod
+    def submit(payload: dict[str, str]) -> dict[str, str]:
+        return {"system": "Linear", "id": f"LIN-{abs(hash(payload['title'])) % 9000 + 1000}", **payload}
+
+
+# --- Unified Adapter ---
+
+class TicketAdapter:
+    """Adapter: normalises both APIs to agent_create_ticket(title, body)."""
+
+    def __init__(self, backend: str = "jira") -> None:
+        self.backend = backend
+
+    def agent_create_ticket(self, title: str, body: str) -> dict[str, str]:
+        if self.backend == "jira":
+            return JiraAPI.create(title=title, body=body)
+        elif self.backend == "linear":
+            return LinearAPI.submit({"title": title, "description": body})
+        else:
+            raise ValueError(f"Unknown backend: {self.backend}")
+
+
+class AdapterState(TypedDict):
     prompt: str
-    plan: list[str]
-    observations: list[str]
+    chosen_backend: str
+    ticket_title: str
+    ticket_body: str
+    raw_api_result: dict[str, str]
     answer: str
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+def parse_ticket_request(state: AdapterState) -> AdapterState:
+    """Extract a ticket title from the prompt heuristically."""
+    title = state["prompt"][:60].strip() if state["prompt"] else "Agent Request"
+    body = f"Auto-created from agent prompt: {state['prompt']}"
+    # Pick backend based on keyword hint in prompt
+    backend = "linear" if "linear" in state["prompt"].lower() else "jira"
+    return {**state, "ticket_title": title, "ticket_body": body, "chosen_backend": backend}
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+def create_ticket_via_adapter(state: AdapterState) -> AdapterState:
+    """Route through the adapter — the agent never calls JiraAPI or LinearAPI directly."""
+    adapter = TicketAdapter(backend=state["chosen_backend"])
+    result = adapter.agent_create_ticket(title=state["ticket_title"], body=state["ticket_body"])
+    return {**state, "raw_api_result": result}
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
+def compose_adapter_answer(state: AdapterState) -> AdapterState:
+    res = state["raw_api_result"]
+    answer = (
+        f"Adapter Pattern: agent called adapter.agent_create_ticket(...) -> "
+        f"routed to {res.get('system')} API -> ticket {res.get('id')} created."
     )
+    return {**state, "answer": answer}
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+def run_plain_python(prompt: str) -> AdapterState:
+    state: AdapterState = {
+        "prompt": prompt,
+        "chosen_backend": "jira",
+        "ticket_title": "",
+        "ticket_body": "",
+        "raw_api_result": {},
+        "answer": "",
+    }
+    state = parse_ticket_request(state)
+    state = create_ticket_via_adapter(state)
+    return compose_adapter_answer(state)
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def render_result(runtime: str, state: AdapterState) -> str:
+    res = state["raw_api_result"]
+    lines = [
+        "Pattern: Adapter Pattern",
+        f"Runtime: {runtime}",
+        f"Prompt: {state['prompt']}",
+        "",
+        "External APIs (different schemas):",
+        "  API A (Jira):   JiraAPI.create(title: str, body: str) -> dict",
+        "  API B (Linear): LinearAPI.submit(payload: dict) -> dict",
+        "",
+        "Unified adapter interface:",
+        "  TicketAdapter.agent_create_ticket(title: str, body: str) -> dict",
+        "",
+        f"Chosen backend (from prompt): {state['chosen_backend']}",
+        f"Ticket title: {state['ticket_title']}",
+        f"Raw API result: system={res.get('system')}  id={res.get('id')}  title={res.get('title', res.get('title', ''))}",
+        "",
+        f"Answer: {state['answer']}",
     ]
-    return {**state, "observations": observations}
-
-
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
     @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langchain(user_prompt)
+    def traced_run(user_prompt: str) -> tuple[str, AdapterState]:
+        return "plain Python", run_plain_python(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
 __all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
+    "JiraAPI",
+    "LinearAPI",
+    "TicketAdapter",
+    "AdapterState",
+    "parse_ticket_request",
+    "create_ticket_via_adapter",
+    "compose_adapter_answer",
+    "run_plain_python",
+    "render_result",
     "run",
 ]

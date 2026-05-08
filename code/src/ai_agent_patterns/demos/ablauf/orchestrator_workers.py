@@ -1,116 +1,151 @@
-"""Orchestrator-Workers demo.
+"""Orchestrator-Workers: Orchestrator zerlegt das Ziel zur Laufzeit in typisierte Tasks und delegiert an Worker.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangGraph, Anthropic Cookbook, Google ADK.
-Pattern idea: Ein Orchestrator zerlegt Arbeit dynamisch und verteilt Teilaufgaben an Worker."""
+Der Lernpunkt: Die Dispatch-Tabelle `workers[task.kind]` macht die Zuteilung explizit —
+der Orchestrator vergibt `kind` (research / write / check) und der Worker-Registry-Lookup
+erfolgt zur Laufzeit, nicht statisch.
+"""
 
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import Literal, TypedDict
 
-from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
+from ai_agent_patterns.demos.common import trace_demo, typed_state
 
-SLUG = 'orchestrator-workers'
+TaskKind = Literal["research", "write", "check"]
 
 
-class DemoState(TypedDict):
+class Task(TypedDict):
+    id: str
+    kind: TaskKind
+    description: str
+
+
+class WorkerResult(TypedDict):
+    task_id: str
+    kind: TaskKind
+    output: str
+
+
+class OrchestratorState(TypedDict):
     prompt: str
-    plan: list[str]
-    observations: list[str]
+    tasks: list[Task]
+    results: list[WorkerResult]
     answer: str
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+# ── Orchestrator ──────────────────────────────────────────────────────────────
 
-
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
-
-
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
-    )
-
-
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
-
-
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def decompose_into_tasks(prompt: str) -> list[Task]:
+    """Break the goal into typed subtasks. Task kinds determine which worker runs."""
+    short = prompt[:40]
+    return [
+        Task(id="t1", kind="research",  description=f"Research background on: {short}"),
+        Task(id="t2", kind="write",     description=f"Write a summary of: {short}"),
+        Task(id="t3", kind="check",     description=f"Fact-check the summary for: {short}"),
     ]
-    return {**state, "observations": observations}
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
+# ── Workers (one per task kind) ───────────────────────────────────────────────
+
+def research_worker(task: Task) -> WorkerResult:
+    output = f"[research] Found 3 relevant sources for '{task['description'][:40]}'."
+    return WorkerResult(task_id=task["id"], kind=task["kind"], output=output)
 
 
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
+def write_worker(task: Task) -> WorkerResult:
+    output = f"[write] Produced a 2-paragraph summary of '{task['description'][:40]}'."
+    return WorkerResult(task_id=task["id"], kind=task["kind"], output=output)
 
 
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
+def check_worker(task: Task) -> WorkerResult:
+    output = f"[check] Verified all claims in '{task['description'][:40]}' — no issues found."
+    return WorkerResult(task_id=task["id"], kind=task["kind"], output=output)
+
+
+# Dispatch table — the orchestrator uses this to route tasks by kind
+WORKER_REGISTRY: dict[TaskKind, object] = {
+    "research": research_worker,
+    "write":    write_worker,
+    "check":    check_worker,
+}
+
+
+def dispatch(task: Task) -> WorkerResult:
+    """Route a task to the appropriate worker based on its kind."""
+    worker = WORKER_REGISTRY[task["kind"]]
+    return worker(task)  # type: ignore[operator]
+
+
+# ── Merger ────────────────────────────────────────────────────────────────────
+
+def merge_results(results: list[WorkerResult]) -> str:
+    parts = [f"  [{r['task_id']} / {r['kind']}] {r['output']}" for r in results]
+    return "Orchestrator merged {} worker result(s):\n".format(len(results)) + "\n".join(parts)
+
+
+# ── Graph nodes ───────────────────────────────────────────────────────────────
+
+def orchestrate_node(state: OrchestratorState) -> OrchestratorState:
+    tasks = decompose_into_tasks(state["prompt"])
+    return {**state, "tasks": tasks}
+
+
+def dispatch_workers_node(state: OrchestratorState) -> OrchestratorState:
+    results = [dispatch(task) for task in state["tasks"]]
+    return {**state, "results": results}
+
+
+def merge_node(state: OrchestratorState) -> OrchestratorState:
+    answer = merge_results(state["results"])
+    return {**state, "answer": answer}
+
+
+# ── Runtime ───────────────────────────────────────────────────────────────────
+
+def run_with_langgraph(prompt: str) -> tuple[str, OrchestratorState]:
     try:
         from langgraph.constants import END, START
         from langgraph.graph import StateGraph
     except ImportError:
-        return run_with_langchain(prompt)
+        state: OrchestratorState = {"prompt": prompt, "tasks": [], "results": [], "answer": ""}
+        state = merge_node(dispatch_workers_node(orchestrate_node(state)))
+        return "plain Python fallback because langgraph is not installed", state
 
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
+    graph = StateGraph(OrchestratorState)
+    graph.add_node("orchestrate", orchestrate_node)
+    graph.add_node("dispatch_workers", dispatch_workers_node)
+    graph.add_node("merge", merge_node)
+    graph.add_edge(START, "orchestrate")
+    graph.add_edge("orchestrate", "dispatch_workers")
+    graph.add_edge("dispatch_workers", "merge")
+    graph.add_edge("merge", END)
+
     app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
+    result: OrchestratorState = typed_state(app.invoke({"prompt": prompt, "tasks": [], "results": [], "answer": ""}))
     return "LangGraph StateGraph", result
 
 
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+def render_result(runtime: str, state: OrchestratorState) -> str:
+    task_summary = ", ".join(f"{t['id']}={t['kind']}" for t in state["tasks"])
+    lines = [
+        "Pattern: Orchestrator-Workers",
+        f"Runtime: {runtime} with optional LangSmith tracing",
+        f"Input: {state['prompt'][:80]}",
+        f"── orchestrator decomposed into {len(state['tasks'])} task(s): [{task_summary}] ──",
+    ]
+    for task in state["tasks"]:
+        lines.append(f"  {task['id']} [{task['kind']}]: {task['description']}")
+    lines.append("── worker results ──")
+    for r in state["results"]:
+        lines.append(f"  {r['output']}")
+    lines.append("── merged ──")
+    lines.append(state["answer"])
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
-    @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
+    @trace_demo("demo.orchestrator-workers")
+    def traced_run(user_prompt: str) -> tuple[str, OrchestratorState]:
         return run_with_langgraph(user_prompt)
 
     runtime, state = traced_run(prompt)
@@ -118,10 +153,11 @@ def run(prompt: str) -> str:
 
 
 __all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
+    "decompose_into_tasks",
+    "dispatch",
+    "merge_results",
+    "WORKER_REGISTRY",
     "run_with_langgraph",
+    "render_result",
     "run",
 ]

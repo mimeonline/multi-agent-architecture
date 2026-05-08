@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import TypeVar, cast
 
 DemoFn = Callable[[str], str]
 F = TypeVar("F", bound=Callable[..., object])
+StateT = TypeVar("StateT")
 
 
 @dataclass(frozen=True)
@@ -36,4 +37,10 @@ def trace_demo(name: str) -> Callable[[F], F]:
 
         return decorator
 
-    return traceable(name=name)
+    return cast(Callable[[F], F], traceable(name=name))
+
+
+def typed_state(state: object, _state_type: type[StateT] | None = None, /) -> StateT:
+    """Tell static type checkers that a framework result has the expected state shape."""
+    _ = _state_type
+    return cast(StateT, state)

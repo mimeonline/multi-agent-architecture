@@ -1,127 +1,129 @@
-"""Audit Trail demo.
+"""Audit Trail: Alle Entscheidungen und Tool-Aufrufe landen unveränderlich im append-only Log.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangSmith, OpenTelemetry.
-Pattern idea: Entscheidungen und Tool-Aufrufe werden nachvollziehbar protokolliert."""
+Der Lernpunkt: Jeder Tool-Call hängt einen Record mit `run_id`, `step`, `action`, `args` und
+`result` an — niemals überschrieben. Das Log lässt sich vollständig replizieren, um jeden
+Agentenschritt zu rekonstruieren.
+"""
 
 from __future__ import annotations
 
+import uuid
+from collections.abc import Callable
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
 
-SLUG = 'audit-trail'
-
-
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
-    answer: str
+SLUG = "audit-trail"
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+class AuditEntry(TypedDict):
+    run_id: str
+    step: int
+    action: str
+    args: dict[str, object]
+    result: str
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+class AuditState(TypedDict):
+    run_id: str
+    audit_log: list[AuditEntry]
+    replay_summary: str
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
+class AuditedToolRunner:
+    def __init__(self, run_id: str) -> None:
+        self.run_id = run_id
+        self.log: list[AuditEntry] = []
+        self._step = 0
+
+    def call(self, action: str, fn: Callable[..., str], args: dict[str, object]) -> str:
+        self._step += 1
+        result = fn(**args)
+        self.log.append(
+            AuditEntry(
+                run_id=self.run_id,
+                step=self._step,
+                action=action,
+                args=args,
+                result=result,
+            )
+        )
+        return result
+
+
+# --- Tool implementations ---
+
+def search_knowledge_base(query: str) -> str:
+    return f"found 3 articles matching '{query[:30]}'"
+
+
+def fetch_user_profile(user_id: str) -> str:
+    return f"profile for {user_id}: name=Alice, plan=pro"
+
+
+def generate_summary(content: str) -> str:
+    return f"summary: {content[:50]}..."
+
+
+def send_report(recipient: str, summary: str) -> str:
+    return f"report sent to {recipient}"
+
+
+def replay_audit_log(log: list[AuditEntry]) -> str:
+    lines = [f"Step {e['step']}: {e['action']}({e['args']}) -> {e['result']}" for e in log]
+    return "\n".join(lines)
+
+
+def run_plain_python(prompt: str) -> tuple[str, AuditState]:
+    run_id = str(uuid.uuid4())[:8]
+    runner = AuditedToolRunner(run_id)
+
+    runner.call("search_knowledge_base", search_knowledge_base, {"query": prompt})
+    runner.call("fetch_user_profile", fetch_user_profile, {"user_id": "u-42"})
+    runner.call(
+        "generate_summary",
+        generate_summary,
+        {"content": f"knowledge base results for '{prompt[:30]}'"},
     )
+    runner.call("send_report", send_report, {"recipient": "ops-team@example.com", "summary": "see log"})
+
+    replay = replay_audit_log(runner.log)
+
+    state: AuditState = {
+        "run_id": run_id,
+        "audit_log": runner.log,
+        "replay_summary": replay,
+    }
+    return "plain Python AuditedToolRunner", state
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
-
-
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def render_result(runtime: str, state: AuditState) -> str:
+    lines = [
+        "Pattern: Audit Trail",
+        f"Runtime: {runtime}",
+        "Mechanic: every tool call appends an immutable AuditEntry; log is replayable",
+        "",
+        f"Run ID: {state['run_id']}",
+        "",
+        "Audit log:",
+        *[
+            f"  [{e['step']}] {e['action']}({e['args']}) -> {e['result']}"
+            for e in state["audit_log"]
+        ],
+        "",
+        "Replay / inspect:",
+        *[f"  {line}" for line in state["replay_summary"].splitlines()],
     ]
-    return {**state, "observations": observations}
-
-
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
     @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langchain(user_prompt)
+    def traced_run(user_prompt: str) -> tuple[str, AuditState]:
+        return run_plain_python(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["AuditedToolRunner", "replay_audit_log", "run_plain_python", "render_result", "run"]

@@ -1,116 +1,118 @@
-"""Map-Reduce demo.
+"""Map-Reduce: Eingaben auf unabhängige Chunks aufteilen, jeden einzeln mappen, am Ende reduzieren.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangGraph, LangChain.
-Pattern idea: Viele unabhängige Chunks werden gemappt und anschließend reduziert."""
+Der Lernpunkt: Die Zweiphasen-Trennung ist im Code direkt sichtbar — `mapped` enthält alle
+Teilresultate, erst `reduce_fn(mapped)` sieht das Gesamtbild. Kein Chunk kennt einen anderen.
+"""
 
 from __future__ import annotations
 
+import textwrap
 from typing import TypedDict
 
-from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
-
-SLUG = 'map-reduce'
+from ai_agent_patterns.demos.common import trace_demo, typed_state
 
 
-class DemoState(TypedDict):
+class MapReduceState(TypedDict):
     prompt: str
-    plan: list[str]
-    observations: list[str]
+    chunks: list[str]
+    mapped: list[str]
     answer: str
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+# ── Map phase ────────────────────────────────────────────────────────────────
+
+def split_into_chunks(text: str, chunk_size: int = 8) -> list[str]:
+    """Break the input into word-groups so each can be mapped independently."""
+    words = text.split()
+    chunks: list[str] = []
+    for i in range(0, len(words), chunk_size):
+        chunks.append(" ".join(words[i : i + chunk_size]))
+    return chunks or [text]
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+def mapper(chunk: str) -> str:
+    """Process a single chunk and return a partial result (word count + top keyword)."""
+    words = chunk.split()
+    keyword = next((w for w in words if len(w) > 4), words[0] if words else "?")
+    return f"[words={len(words)}, keyword={keyword!r}]"
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
+# ── Reduce phase ─────────────────────────────────────────────────────────────
+
+def reducer(partials: list[str]) -> str:
+    """Aggregate all partial results from the map phase into one final summary."""
+    total_words = 0
+    keywords: list[str] = []
+    for partial in partials:
+        try:
+            total_words += int(partial.split("words=")[1].split(",")[0])
+            keywords.append(partial.split("keyword=")[1].strip("[]'\""))
+        except (IndexError, ValueError):
+            pass
     return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
+        f"Reduced {len(partials)} partial result(s) | "
+        f"total_words={total_words} | top_keywords={keywords}"
     )
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+# ── Graph nodes ───────────────────────────────────────────────────────────────
+
+def chunk_node(state: MapReduceState) -> MapReduceState:
+    return {**state, "chunks": split_into_chunks(state["prompt"])}
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
-    ]
-    return {**state, "observations": observations}
+def map_node(state: MapReduceState) -> MapReduceState:
+    # Each chunk is mapped independently — in production these run in parallel
+    mapped = [mapper(chunk) for chunk in state["chunks"]]
+    return {**state, "mapped": mapped}
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
+def reduce_node(state: MapReduceState) -> MapReduceState:
+    return {**state, "answer": reducer(state["mapped"])}
 
 
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
+# ── Runtime ───────────────────────────────────────────────────────────────────
 
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
+def run_with_langgraph(prompt: str) -> tuple[str, MapReduceState]:
     try:
         from langgraph.constants import END, START
         from langgraph.graph import StateGraph
     except ImportError:
-        return run_with_langchain(prompt)
+        state: MapReduceState = {"prompt": prompt, "chunks": [], "mapped": [], "answer": ""}
+        state = reduce_node(map_node(chunk_node(state)))
+        return "plain Python fallback because langgraph is not installed", state
 
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
+    graph = StateGraph(MapReduceState)
+    graph.add_node("chunk", chunk_node)
+    graph.add_node("map", map_node)
+    graph.add_node("reduce", reduce_node)
+    graph.add_edge(START, "chunk")
+    graph.add_edge("chunk", "map")
+    graph.add_edge("map", "reduce")
+    graph.add_edge("reduce", END)
+
     app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
+    result: MapReduceState = typed_state(app.invoke({"prompt": prompt, "chunks": [], "mapped": [], "answer": ""}))
     return "LangGraph StateGraph", result
 
 
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+def render_result(runtime: str, state: MapReduceState) -> str:
+    lines = [
+        "Pattern: Map-Reduce",
+        f"Runtime: {runtime} with optional LangSmith tracing",
+        f"Input ({len(state['prompt'].split())} words): {textwrap.shorten(state['prompt'], 70)}",
+        f"── MAP phase: {len(state['chunks'])} chunk(s) ──",
+    ]
+    for i, (chunk, partial) in enumerate(zip(state["chunks"], state["mapped"]), 1):
+        lines.append(f"  chunk {i}: {textwrap.shorten(chunk, 40)!r}  →  {partial}")
+    lines.append(f"── REDUCE ──")
+    lines.append(f"  {state['answer']}")
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
-    @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
+    @trace_demo("demo.map-reduce")
+    def traced_run(user_prompt: str) -> tuple[str, MapReduceState]:
         return run_with_langgraph(user_prompt)
 
     runtime, state = traced_run(prompt)
@@ -118,10 +120,10 @@ def run(prompt: str) -> str:
 
 
 __all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
+    "split_into_chunks",
+    "mapper",
+    "reducer",
     "run_with_langgraph",
+    "render_result",
     "run",
 ]

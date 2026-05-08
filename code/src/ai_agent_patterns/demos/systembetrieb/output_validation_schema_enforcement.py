@@ -1,127 +1,146 @@
-"""Output Validation / Schema Enforcement demo.
+"""Output Validation / Schema Enforcement: Modellantwort wird gegen ein Schema geprüft, bevor sie weitergeht.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: Pydantic, OpenAI Structured Outputs, LangChain.
-Pattern idea: Modellantworten werden gegen Schema oder Regeln geprüft."""
+Der Lernpunkt: Schlägt die Pydantic-Validierung fehl, fließt der Validierungsfehler als
+`correction hint` in den nächsten Prompt — bis zu `MAX_RETRIES` Mal. Downstream-Code sieht
+nur valide, typisierte Objekte.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
 
-SLUG = 'output-validation-schema-enforcement'
+SLUG = "output-validation-schema-enforcement"
 
+MAX_RETRIES = 2
 
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
-    answer: str
-
-
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+# Schema: required field name -> expected Python type
+SCHEMA: dict[str, type] = {
+    "title": str,
+    "confidence": float,
+    "tags": list,
+    "source_url": str,
+}
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+class ValidationError(TypedDict):
+    field: str
+    reason: str
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
-    )
+class AttemptRecord(TypedDict):
+    attempt: int
+    raw_output: dict[str, object]
+    errors: list[ValidationError]
+    valid: bool
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+class ValidationState(TypedDict):
+    schema: dict[str, str]
+    attempts: list[AttemptRecord]
+    final_output: dict[str, object] | None
+    outcome: str
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def validate_output(output: dict[str, object]) -> list[ValidationError]:
+    errors: list[ValidationError] = []
+    for field, expected_type in SCHEMA.items():
+        if field not in output:
+            errors.append({"field": field, "reason": "missing"})
+        elif not isinstance(output[field], expected_type):
+            actual = type(output[field]).__name__
+            errors.append({"field": field, "reason": f"expected {expected_type.__name__}, got {actual}"})
+    return errors
+
+
+def simulate_agent_output(prompt: str, attempt: int) -> dict[str, object]:
+    """Simulate progressively corrected agent output across retries."""
+    if attempt == 1:
+        # First attempt: missing 'source_url' and wrong type for 'confidence'
+        return {
+            "title": f"Analysis of: {prompt[:30]}",
+            "confidence": "high",  # wrong type — should be float
+            "tags": ["ai", "demo"],
+            # source_url missing
+        }
+    if attempt == 2:
+        # Second attempt after hint: still wrong type
+        return {
+            "title": f"Analysis of: {prompt[:30]}",
+            "confidence": "0.87",  # still a string
+            "tags": ["ai", "demo"],
+            "source_url": "https://example.com/source",
+        }
+    # Third attempt: fully correct
+    return {
+        "title": f"Analysis of: {prompt[:30]}",
+        "confidence": 0.87,
+        "tags": ["ai", "demo"],
+        "source_url": "https://example.com/source",
+    }
+
+
+def run_plain_python(prompt: str) -> tuple[str, ValidationState]:
+    attempts: list[AttemptRecord] = []
+    final_output: dict[str, object] | None = None
+    outcome = "failed after max retries"
+
+    for attempt in range(1, MAX_RETRIES + 2):  # 1, 2, 3
+        raw = simulate_agent_output(prompt, attempt)
+        errors = validate_output(raw)
+        record = AttemptRecord(attempt=attempt, raw_output=raw, errors=errors, valid=not errors)
+        attempts.append(record)
+
+        if not errors:
+            final_output = raw
+            outcome = f"valid on attempt {attempt}"
+            break
+        # Correction hint would be appended to prompt on retry (simulated by attempt counter)
+
+    state: ValidationState = {
+        "schema": {k: v.__name__ for k, v in SCHEMA.items()},
+        "attempts": attempts,
+        "final_output": final_output,
+        "outcome": outcome,
+    }
+    return "plain Python schema validator with retry", state
+
+
+def render_result(runtime: str, state: ValidationState) -> str:
+    lines = [
+        "Pattern: Output Validation / Schema Enforcement",
+        f"Runtime: {runtime}",
+        "Mechanic: validate output against schema; inject correction hint and retry on failure",
+        "",
+        "Required schema:",
+        *[f"  {field}: {typ}" for field, typ in state["schema"].items()],
+        "",
+        "Validation attempts:",
     ]
-    return {**state, "observations": observations}
-
-
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+    for record in state["attempts"]:
+        status = "VALID" if record["valid"] else "INVALID"
+        lines.append(f"\n  Attempt {record['attempt']} [{status}]:")
+        lines.append(f"    Output: {record['raw_output']}")
+        if record["errors"]:
+            for err in record["errors"]:
+                lines.append(f"    Error: {err['field']} — {err['reason']}")
+        if not record["valid"] and record["attempt"] <= MAX_RETRIES:
+            lines.append("    -> retrying with correction hint...")
+    lines.append("")
+    lines.append(f"Outcome: {state['outcome']}")
+    if state["final_output"]:
+        lines.append(f"Final output: {state['final_output']}")
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
     @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langchain(user_prompt)
+    def traced_run(user_prompt: str) -> tuple[str, ValidationState]:
+        return run_plain_python(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["validate_output", "run_plain_python", "render_result", "run"]

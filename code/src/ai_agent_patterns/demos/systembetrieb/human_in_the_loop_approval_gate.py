@@ -1,127 +1,129 @@
-"""Human-in-the-Loop Approval Gate demo.
+"""Human-in-the-Loop Approval Gate: Der Agent pausiert vor riskanten Aktionen und wartet auf menschliche Freigabe.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangGraph interrupts, Google ADK.
-Pattern idea: Kritische Aktionen werden vor Ausführung menschlich freigegeben."""
+Der Lernpunkt: Ein `risk_score` bestimmt, ob das Gate automatisch öffnet oder explizite
+Freigabe verlangt. Der pausierte State liegt im Checkpoint — `approved(action)` ist die
+einzige Schranke vor `execute(action)`.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
 
-SLUG = 'human-in-the-loop-approval-gate'
+SLUG = "human-in-the-loop-approval-gate"
 
-
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
-    answer: str
+APPROVAL_THRESHOLD = 0.6
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+class Action(TypedDict):
+    name: str
+    description: str
+    risk_score: float  # 0.0 = safe, 1.0 = highly dangerous
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+class ApprovalRecord(TypedDict):
+    action: str
+    risk_score: float
+    gate_triggered: bool
+    approval_decision: str  # "auto-approved" | "human-approved" | "human-rejected"
+    executed: bool
+    result: str
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
+class HITLState(TypedDict):
+    actions: list[Action]
+    approval_log: list[ApprovalRecord]
+    threshold: float
+
+
+def compute_risk(action: Action) -> float:
+    return action["risk_score"]
+
+
+def simulate_human_approval(action: Action) -> str:
+    """Simulate a human approval step. In production this would pause and wait for a callback."""
+    # Demo policy: approve unless action name contains "delete"
+    if "delete" in action["name"].lower():
+        return "human-rejected"
+    return "human-approved"
+
+
+def execute_action(action: Action) -> str:
+    return f"executed: {action['description']}"
+
+
+def process_action_through_gate(action: Action, threshold: float) -> ApprovalRecord:
+    risk = compute_risk(action)
+    gate_triggered = risk >= threshold
+
+    if not gate_triggered:
+        decision = "auto-approved"
+        executed = True
+        result = execute_action(action)
+    else:
+        decision = simulate_human_approval(action)
+        if decision == "human-approved":
+            executed = True
+            result = execute_action(action)
+        else:
+            executed = False
+            result = f"blocked: human rejected '{action['name']}'"
+
+    return ApprovalRecord(
+        action=action["name"],
+        risk_score=risk,
+        gate_triggered=gate_triggered,
+        approval_decision=decision,
+        executed=executed,
+        result=result,
     )
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
-
-
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def run_plain_python(prompt: str) -> tuple[str, HITLState]:
+    actions: list[Action] = [
+        {"name": "read_report", "description": f"read quarterly report (prompt: {prompt[:30]})", "risk_score": 0.1},
+        {"name": "send_notification", "description": "send summary email to team", "risk_score": 0.5},
+        {"name": "update_config", "description": "update production rate-limit config", "risk_score": 0.75},
+        {"name": "delete_user_data", "description": "permanently delete user records", "risk_score": 0.95},
     ]
-    return {**state, "observations": observations}
+
+    approval_log = [process_action_through_gate(a, APPROVAL_THRESHOLD) for a in actions]
+
+    state: HITLState = {
+        "actions": actions,
+        "approval_log": approval_log,
+        "threshold": APPROVAL_THRESHOLD,
+    }
+    return "plain Python approval gate", state
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+def render_result(runtime: str, state: HITLState) -> str:
+    lines = [
+        "Pattern: Human-in-the-Loop Approval Gate",
+        f"Runtime: {runtime}",
+        f"Mechanic: risk_score >= {state['threshold']} triggers gate; human decides approve/reject",
+        "",
+        "Approval log:",
+    ]
+    for record in state["approval_log"]:
+        gate = "GATE" if record["gate_triggered"] else "pass"
+        lines.append(
+            f"  [{gate}] {record['action']} "
+            f"(risk={record['risk_score']:.2f}) "
+            f"-> {record['approval_decision']} "
+            f"-> {record['result']}"
+        )
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
     @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langgraph(user_prompt)
+    def traced_run(user_prompt: str) -> tuple[str, HITLState]:
+        return run_plain_python(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["process_action_through_gate", "run_plain_python", "render_result", "run"]

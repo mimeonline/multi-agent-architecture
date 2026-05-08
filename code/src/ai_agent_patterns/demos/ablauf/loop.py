@@ -1,116 +1,154 @@
-"""Loop demo.
+"""Loop: Einen Schritt wiederholen, bis eine explizite Abbruchbedingung erfüllt ist.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangGraph, CrewAI Flows.
-Pattern idea: Ein Schritt wird bis zu einer Abbruchbedingung wiederholt."""
+Der Lernpunkt: Die `while`-Schleife hat eine harte Obergrenze via `max_attempts` — Zähler
+und Qualitätsschwelle liegen offen im State. Der Lesende sieht sofort, warum die Schleife
+stoppt: Qualitätsziel erreicht oder Budget aufgebraucht.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
-from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
+from ai_agent_patterns.demos.common import trace_demo, typed_state
 
-SLUG = 'loop'
+MAX_ATTEMPTS = 4
+QUALITY_THRESHOLD = 60  # score out of 100
 
 
-class DemoState(TypedDict):
+class LoopState(TypedDict):
     prompt: str
-    plan: list[str]
-    observations: list[str]
+    attempt: int
+    draft: str
+    quality_score: int
+    passed: bool
+    iterations: list[str]
     answer: str
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+# ── Worker ────────────────────────────────────────────────────────────────────
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+def produce_draft(prompt: str, attempt: int) -> str:
+    """Produce a draft; each attempt adds a little more content."""
+    base = f"Draft for '{prompt[:50]}'"
+    extension = " [improved]" * attempt
+    return base + extension + "."
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
+# ── Quality check ─────────────────────────────────────────────────────────────
+
+
+def assess_quality(draft: str) -> int:
+    """Score the draft 0–100. Passes if length >= 60 chars and ends with '.'."""
+    length_score = min(100, len(draft) * 2)
+    ends_correctly = 10 if draft.endswith(".") else 0
+    return length_score + ends_correctly
+
+
+def quality_gate(score: int) -> bool:
+    return score >= QUALITY_THRESHOLD
+
+
+# ── Loop logic ────────────────────────────────────────────────────────────────
+
+
+def run_loop(prompt: str) -> LoopState:
+    """Run the worker-check-retry loop and return final state."""
+    state: LoopState = {
+        "prompt": prompt,
+        "attempt": 0,
+        "draft": "",
+        "quality_score": 0,
+        "passed": False,
+        "iterations": [],
+        "answer": "",
+    }
+
+    while state["attempt"] < MAX_ATTEMPTS and not state["passed"]:
+        state["attempt"] += 1
+        draft = produce_draft(prompt, state["attempt"])
+        score = assess_quality(draft)
+        passed = quality_gate(score)
+
+        iteration_log = (
+            f"attempt={state['attempt']} | "
+            f"draft_len={len(draft)} | "
+            f"score={score} | "
+            f"passed={passed}"
+        )
+        state = {
+            **state,
+            "draft": draft,
+            "quality_score": score,
+            "passed": passed,
+            "iterations": [*state["iterations"], iteration_log],
+        }
+
+    stop_reason = (
+        "quality threshold reached"
+        if state["passed"]
+        else f"max_attempts={MAX_ATTEMPTS} exhausted"
     )
+    state["answer"] = (
+        f"Loop stopped after {state['attempt']} attempt(s): {stop_reason}. "
+        f"Final score={state['quality_score']}."
+    )
+    return state
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+# ── LangGraph wrapper ─────────────────────────────────────────────────────────
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
-    ]
-    return {**state, "observations": observations}
+def loop_node(state: LoopState) -> LoopState:
+    """Single LangGraph node that runs the entire loop internally."""
+    return run_loop(state["prompt"])
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
+def run_with_langgraph(prompt: str) -> tuple[str, LoopState]:
     try:
-        from langchain_core.runnables import RunnableLambda
+        from langgraph.constants import END, START  # type: ignore[import-not-found]
+        from langgraph.graph import StateGraph  # type: ignore[import-not-found]
     except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
+        state = run_loop(prompt)
+        return "plain Python fallback because langgraph is not installed", state
 
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
+    graph = StateGraph(LoopState)
+    graph.add_node("loop", loop_node)
+    graph.add_edge(START, "loop")
+    graph.add_edge("loop", END)
 
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
     app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
+    init: LoopState = {
+        "prompt": prompt,
+        "attempt": 0,
+        "draft": "",
+        "quality_score": 0,
+        "passed": False,
+        "iterations": [],
+        "answer": "",
+    }
+    result = typed_state(app.invoke(init))
     return "LangGraph StateGraph", result
 
 
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+def render_result(runtime: str, state: LoopState) -> str:
+    lines = [
+        "Pattern: Loop",
+        f"Runtime: {runtime} with optional LangSmith tracing",
+        f"Input: {state['prompt'][:80]}",
+        f"Config: max_attempts={MAX_ATTEMPTS}, quality_threshold={QUALITY_THRESHOLD}",
+        "── iteration log ──",
+    ]
+    for entry in state["iterations"]:
+        lines.append(f"  {entry}")
+    lines.append("── result ──")
+    lines.append(f"  {state['answer']}")
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
-    @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
+    @trace_demo("demo.loop")
+    def traced_run(user_prompt: str) -> tuple[str, LoopState]:
         return run_with_langgraph(user_prompt)
 
     runtime, state = traced_run(prompt)
@@ -118,10 +156,11 @@ def run(prompt: str) -> str:
 
 
 __all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
+    "produce_draft",
+    "assess_quality",
+    "quality_gate",
+    "run_loop",
     "run_with_langgraph",
+    "render_result",
     "run",
 ]

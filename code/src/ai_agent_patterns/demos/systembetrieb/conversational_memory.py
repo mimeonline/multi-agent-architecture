@@ -1,12 +1,14 @@
-"""Conversational Memory demo with LangGraph checkpointing.
+"""Conversational Memory: Die bisherige Konversation wird als wachsendes Array im LLM-Call mitgeschickt.
 
-The code stores conversation state when LangGraph is available and falls back to a deterministic local memory note otherwise.
+Der Lernpunkt: `messages: list` wächst Turn für Turn — jede neue Anfrage bekommt die gesamte
+Historie als Kontext. Das Tokenbudget ist die natürliche Grenze; was darüber hinausgeht,
+braucht Compressed Context.
 """
 
 from __future__ import annotations
 
 import uuid
-from typing import TypedDict
+from typing import Any, TypedDict, cast
 
 
 class MemoryState(TypedDict):
@@ -15,14 +17,14 @@ class MemoryState(TypedDict):
     response: str
 
 
-def _remember(state: MemoryState) -> dict[str, list[str] | str]:
+def _remember(state: MemoryState) -> MemoryState:
     facts = list(state.get("facts", []))
     message = state["message"]
     lowered = message.lower()
     if "my name is" in lowered or "i like" in lowered or "i prefer" in lowered:
         facts.append(message)
     response = "I will remember: " + "; ".join(facts[-3:]) if facts else "No durable fact detected."
-    return {"facts": facts, "response": response}
+    return {**state, "facts": facts, "response": response}
 
 
 def run(prompt: str) -> str:
@@ -32,10 +34,10 @@ def run(prompt: str) -> str:
         from langgraph.graph import StateGraph
     except ImportError:
         state: MemoryState = {"message": prompt, "facts": [], "response": ""}
-        state.update(_remember(state))
+        state = _remember(state)
         return "\n".join(
             [
-                "Pattern: Memory",
+                "Pattern: Conversational Memory",
                 "Mode: offline fallback (langgraph not installed)",
                 state["response"],
             ]
@@ -46,7 +48,7 @@ def run(prompt: str) -> str:
     graph.add_edge(START, "remember")
     graph.set_finish_point("remember")
     app = graph.compile(checkpointer=InMemorySaver())
-    config = {"configurable": {"thread_id": str(uuid.uuid4())}}
+    config = cast(Any, {"configurable": {"thread_id": str(uuid.uuid4())}})
 
     first = app.invoke({"message": prompt, "facts": [], "response": ""}, config)
     second = app.invoke(
@@ -55,7 +57,7 @@ def run(prompt: str) -> str:
     )
     return "\n".join(
         [
-            "Pattern: Memory",
+            "Pattern: Conversational Memory",
             first["response"],
             "Replay: " + second["response"],
         ]

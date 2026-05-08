@@ -1,127 +1,134 @@
-"""Saga / Compensation demo.
+"""Saga / Compensation: Jede Aktion ist mit ihrer Kompensation gepaart; Fehler lösen Rollback aus.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: Workflow Engines, LangGraph durable runtime.
-Pattern idea: Mehrschrittige Aktionen werden durch fachliche Rücknahme-Schritte abgesichert."""
+Der Lernpunkt: Jeder Schritt ist ein `(do, undo)`-Tupel — schlägt `do` fehl, werden alle
+bereits ausgeführten `undo`-Funktionen in umgekehrter Reihenfolge aufgerufen. Fachlicher
+Rollback ohne atomare Transaktion.
+"""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
 
-SLUG = 'saga-compensation'
-
-
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
-    answer: str
+SLUG = "saga-compensation"
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+class SagaStep(TypedDict):
+    name: str
+    do: Callable[[], str]
+    undo: Callable[[], str]
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+class SagaState(TypedDict):
+    steps_completed: list[str]
+    failed_step: str | None
+    compensations: list[str]
+    outcome: str
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
-    )
+# --- Simulated distributed operations ---
+
+_reserved_inventory: list[str] = []
+_charged_payment: list[str] = []
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+def reserve_inventory() -> str:
+    _reserved_inventory.append("item-42")
+    return "inventory reserved: item-42"
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def unreserve_inventory() -> str:
+    if _reserved_inventory:
+        item = _reserved_inventory.pop()
+        return f"inventory released: {item}"
+    return "nothing to release"
+
+
+def charge_payment() -> str:
+    _charged_payment.append("charge-99.00")
+    return "payment charged: $99.00"
+
+
+def refund_payment() -> str:
+    if _charged_payment:
+        charge = _charged_payment.pop()
+        return f"payment refunded: {charge}"
+    return "nothing to refund"
+
+
+def notify_warehouse() -> str:
+    raise RuntimeError("warehouse service unavailable")  # Step 3 always fails in this demo
+
+
+def cancel_warehouse_notification() -> str:
+    return "warehouse notification cancelled (was never sent)"
+
+
+def run_plain_python(prompt: str) -> tuple[str, SagaState]:
+    # Reset side-effects for each run
+    _reserved_inventory.clear()
+    _charged_payment.clear()
+
+    steps: list[SagaStep] = [
+        {"name": "reserve_inventory", "do": reserve_inventory, "undo": unreserve_inventory},
+        {"name": "charge_payment", "do": charge_payment, "undo": refund_payment},
+        {"name": "notify_warehouse", "do": notify_warehouse, "undo": cancel_warehouse_notification},
     ]
-    return {**state, "observations": observations}
+
+    completed: list[tuple[str, Callable[[], str]]] = []
+    state: SagaState = {
+        "steps_completed": [],
+        "failed_step": None,
+        "compensations": [],
+        "outcome": "",
+    }
+
+    for step in steps:
+        try:
+            result = step["do"]()
+            completed.append((step["name"], step["undo"]))
+            state["steps_completed"].append(f"{step['name']} -> {result}")
+        except Exception as exc:
+            state["failed_step"] = f"{step['name']}: {exc}"
+            # Compensate in reverse order
+            for name, undo_fn in reversed(completed):
+                undo_result = undo_fn()
+                state["compensations"].append(f"UNDO {name} -> {undo_result}")
+            state["outcome"] = "saga aborted; compensation complete"
+            return "plain Python Saga", state
+
+    state["outcome"] = "saga committed"
+    return "plain Python Saga", state
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+def render_result(runtime: str, state: SagaState) -> str:
+    lines = [
+        "Pattern: Saga / Compensation",
+        f"Runtime: {runtime}",
+        "Mechanic: (do, undo) step pairs — failure triggers reverse compensation",
+        "",
+        "Steps executed (forward):",
+        *[f"  OK  {s}" for s in state["steps_completed"]],
+    ]
+    if state["failed_step"]:
+        lines.append(f"  FAIL {state['failed_step']}")
+        lines.append("")
+        lines.append("Compensation log (reverse order):")
+        lines.extend([f"  {c}" for c in state["compensations"]])
+    lines.append("")
+    lines.append(f"Outcome: {state['outcome']}")
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
     @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langgraph(user_prompt)
+    def traced_run(user_prompt: str) -> tuple[str, SagaState]:
+        return run_plain_python(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["run_plain_python", "render_result", "run"]

@@ -1,16 +1,8 @@
-"""Function Calling demo.
+"""Function Calling: Das Modell gibt eine strukturierte Aufruf-Spezifikation aus statt Freitext.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. A real Python function is exposed as an agent tool with a small JSON-like schema.
-2. The "model decision" is represented as a structured function call: name plus arguments.
-3. The arguments are validated before the function is executed.
-4. LangChain can wire the same steps as a local RunnableSequence, while LangSmith can trace the run.
-
-Framework focus: LangChain Tools, OpenAI Agents SDK.
-Pattern idea: Tools werden über strukturierte, validierbare Argumente aufgerufen.
+Der Lernpunkt: Funktionsname und typisierte Argumente werden schemabasiert validiert, bevor
+irgendwas ausgeführt wird. Der Registry-Lookup `tools[name](**args)` macht Tool-Auswahl und
+Argumentübergabe direkt lesbar.
 """
 
 from __future__ import annotations

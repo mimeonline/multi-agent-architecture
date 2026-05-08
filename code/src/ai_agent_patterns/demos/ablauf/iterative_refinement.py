@@ -1,116 +1,157 @@
-"""Iterative Refinement demo.
+"""Iterative Refinement: Jeder Durchlauf fokussiert auf eine explizite Verbesserungsdimension.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangGraph, LangChain.
-Pattern idea: Ein Ergebnis wird über kontrollierte Revisionen schrittweise verbessert."""
+Der Lernpunkt: Die Liste `["structure", "examples", "tone"]` macht den Fortschritt greifbar —
+jeder `focus`-Wert steuert einen eigenen Prompt. `revisions` protokolliert alle Zwischenstände,
+so dass ziellose Revisionen ausgeschlossen sind.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
-from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
+from ai_agent_patterns.demos.common import trace_demo, typed_state
 
-SLUG = 'iterative-refinement'
+# Named refinement dimensions applied in order
+REFINEMENT_ROUNDS: list[tuple[str, str]] = [
+    ("structure", "Reorganise into clear introduction, body, and conclusion."),
+    ("examples", "Add a concrete example to each main point."),
+    ("tone", "Adjust tone to be concise and direct, removing filler words."),
+]
 
 
-class DemoState(TypedDict):
+class Revision(TypedDict):
+    round: int
+    dimension: str
+    instruction: str
+    text: str
+
+
+class RefinementState(TypedDict):
     prompt: str
-    plan: list[str]
-    observations: list[str]
+    initial_draft: str
+    revisions: list[Revision]
+    current_text: str
     answer: str
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+# ── Drafter ───────────────────────────────────────────────────────────────────
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+def produce_initial_draft(prompt: str) -> str:
+    """Create the first rough draft — intentionally sparse."""
+    return f"Draft: {prompt[:60]}. More details needed."
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
+# ── Refiner ───────────────────────────────────────────────────────────────────
+
+
+def refine(text: str, round_num: int, dimension: str, instruction: str) -> str:
+    """Apply one targeted improvement to the current text."""
+    tag = f"[{dimension.upper()}]"
+    return f"{text} {tag} {instruction}"
+
+
+# ── Graph nodes ───────────────────────────────────────────────────────────────
+
+
+def draft_node(state: RefinementState) -> RefinementState:
+    initial = produce_initial_draft(state["prompt"])
+    return {**state, "initial_draft": initial, "current_text": initial}
+
+
+def refine_node(state: RefinementState) -> RefinementState:
+    """Apply all refinement rounds sequentially, recording each revision."""
+    text = state["current_text"]
+    revisions: list[Revision] = list(state["revisions"])
+
+    for i, (dimension, instruction) in enumerate(REFINEMENT_ROUNDS, start=1):
+        text = refine(text, i, dimension, instruction)
+        revisions.append(
+            Revision(
+                round=i,
+                dimension=dimension,
+                instruction=instruction,
+                text=text,
+            )
+        )
+
+    return {**state, "revisions": revisions, "current_text": text}
+
+
+def finalize_node(state: RefinementState) -> RefinementState:
+    rounds_summary = ", ".join(r["dimension"] for r in state["revisions"])
+    answer = (
+        f"Refined over {len(state['revisions'])} round(s) [{rounds_summary}].\n"
+        f"Final text: {state['current_text']}"
     )
+    return {**state, "answer": answer}
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+# ── Runtime ───────────────────────────────────────────────────────────────────
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
-    ]
-    return {**state, "observations": observations}
-
-
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
+def run_with_langgraph(prompt: str) -> tuple[str, RefinementState]:
     try:
         from langgraph.constants import END, START
         from langgraph.graph import StateGraph
     except ImportError:
-        return run_with_langchain(prompt)
+        state: RefinementState = {
+            "prompt": prompt,
+            "initial_draft": "",
+            "revisions": [],
+            "current_text": "",
+            "answer": "",
+        }
+        state = finalize_node(refine_node(draft_node(state)))
+        return "plain Python fallback because langgraph is not installed", state
 
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
+    graph = StateGraph(RefinementState)
+    graph.add_node("draft", draft_node)
+    graph.add_node("refine", refine_node)
+    graph.add_node("finalize", finalize_node)
+    graph.add_edge(START, "draft")
+    graph.add_edge("draft", "refine")
+    graph.add_edge("refine", "finalize")
+    graph.add_edge("finalize", END)
+
     app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
+    result: RefinementState = typed_state(app.invoke(
+        {
+            "prompt": prompt,
+            "initial_draft": "",
+            "revisions": [],
+            "current_text": "",
+            "answer": "",
+        }
+    ))
     return "LangGraph StateGraph", result
 
 
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+def render_result(runtime: str, state: RefinementState) -> str:
+    lines = [
+        "Pattern: Iterative Refinement",
+        f"Runtime: {runtime} with optional LangSmith tracing",
+        f"Input: {state['prompt'][:80]}",
+        f"Initial draft: {state['initial_draft']!r}",
+        f"── {len(state['revisions'])} refinement round(s) ──",
+    ]
+    for rev in state["revisions"]:
+        text_preview = rev["text"][:80]
+        ellipsis = "…" if len(rev["text"]) > 80 else ""
+        lines.append(
+            f"  round {rev['round']} [{rev['dimension']}]: {text_preview}{ellipsis}"
+        )
+
+    lines.append("── final ──")
+    final_text = state["current_text"][:120]
+    final_ellipsis = "…" if len(state["current_text"]) > 120 else ""
+    lines.append(f"  {final_text}{final_ellipsis}")
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
-    @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
+    @trace_demo("demo.iterative-refinement")
+    def traced_run(user_prompt: str) -> tuple[str, RefinementState]:
         return run_with_langgraph(user_prompt)
 
     runtime, state = traced_run(prompt)
@@ -118,10 +159,9 @@ def run(prompt: str) -> str:
 
 
 __all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
+    "produce_initial_draft",
+    "refine",
     "run_with_langgraph",
+    "render_result",
     "run",
 ]

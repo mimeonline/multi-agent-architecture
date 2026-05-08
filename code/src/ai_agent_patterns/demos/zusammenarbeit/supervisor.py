@@ -1,6 +1,8 @@
-"""Supervisor demo with a LangGraph StateGraph.
+"""Supervisor: Zentraler Agent betreut Spezialisten und entscheidet pro Schritt, wer als nächstes dran ist.
 
-The supervisor node chooses a specialist, then hands control to the researcher or builder node.
+Der Lernpunkt: Der Supervisor-Knoten wählt per LLM aus `["researcher", "builder", "done"]` —
+`add_conditional_edges` routet das Ergebnis. Kontrolle bleibt zentral; kein Spezialist
+entscheidet selbst, wer nach ihm kommt.
 """
 
 from __future__ import annotations
@@ -38,8 +40,10 @@ def run(prompt: str) -> str:
         from langgraph.graph import StateGraph
     except ImportError:
         state: AgentState = {"request": prompt, "specialist": "", "result": ""}
-        state.update(_choose_specialist(state))
-        state.update(_researcher(state) if _handoff(state) == "researcher" else _builder(state))
+        state["specialist"] = _choose_specialist(state)["specialist"]
+        state["result"] = (
+            _researcher(state)["result"] if _handoff(state) == "researcher" else _builder(state)["result"]
+        )
         return "\n".join(
             [
                 "Pattern: Supervisor",

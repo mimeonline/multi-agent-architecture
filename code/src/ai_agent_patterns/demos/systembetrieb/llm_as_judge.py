@@ -1,127 +1,149 @@
-"""LLM-as-Judge demo.
+"""LLM-as-Judge: Ein zweites Modell bewertet Ausgaben des ersten anhand schriftlich fixierter Kriterien.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangSmith, OpenAI Evals.
-Pattern idea: Ein Modell bewertet Ausgaben anhand einer Rubrik."""
+Der Lernpunkt: Die Rubrik ist eine Liste benannter Kriterien, jedes mit Score 1–5. Der Judge
+aggregiert per Mittelwert — transparent nachvollziehbar und kalibrierbar gegen menschliche
+Referenzwerte.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
 
-SLUG = 'llm-as-judge'
+SLUG = "llm-as-judge"
+
+# Rubric criteria with descriptions
+RUBRIC: dict[str, str] = {
+    "clarity": "Is the answer easy to understand, well-structured, and concise?",
+    "accuracy": "Is the answer factually correct and complete?",
+    "relevance": "Does the answer directly address the question asked?",
+}
 
 
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
+class CriterionScore(TypedDict):
+    criterion: str
+    score: int  # 1–5
+    rationale: str
+
+
+class CandidateEvaluation(TypedDict):
+    candidate_id: str
     answer: str
+    scores: list[CriterionScore]
+    aggregate: float
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+class JudgeState(TypedDict):
+    question: str
+    candidates: list[str]
+    evaluations: list[CandidateEvaluation]
+    best_candidate: str
+    best_score: float
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+def judge_candidate(candidate_id: str, answer: str, question: str) -> CandidateEvaluation:
+    """Deterministic mock judge: scores based on structural properties of the answer."""
+    word_count = len(answer.split())
+    has_structure = any(marker in answer for marker in [":", "1.", "-", "•"])
+    mentions_question_words = any(w in answer.lower() for w in question.lower().split() if len(w) > 4)
 
+    # Clarity: penalise very short or very long answers
+    clarity = 5 if 20 <= word_count <= 80 else (3 if word_count < 10 else 2)
+    clarity_rationale = f"word_count={word_count}, structured={has_structure}"
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
-    )
+    # Accuracy: boost if the answer uses structured information (proxy for thoroughness)
+    accuracy = 4 if has_structure else 3
+    accuracy_rationale = f"structured_format={has_structure}"
 
+    # Relevance: did the answer reference the question's key terms?
+    relevance = 5 if mentions_question_words else 2
+    relevance_rationale = f"mentions_question_terms={mentions_question_words}"
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
-
-
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+    scores: list[CriterionScore] = [
+        {"criterion": "clarity", "score": clarity, "rationale": clarity_rationale},
+        {"criterion": "accuracy", "score": accuracy, "rationale": accuracy_rationale},
+        {"criterion": "relevance", "score": relevance, "rationale": relevance_rationale},
     ]
-    return {**state, "observations": observations}
+    aggregate = round(sum(s["score"] for s in scores) / len(scores), 2)
 
-
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
+    return CandidateEvaluation(
+        candidate_id=candidate_id,
+        answer=answer,
+        scores=scores,
+        aggregate=aggregate,
     )
+
+
+def run_plain_python(prompt: str) -> tuple[str, JudgeState]:
+    question = prompt or "What are the main benefits of distributed tracing for AI agents?"
+
+    candidates = [
+        # Candidate A: short, vague
+        "Tracing helps you debug agents.",
+        # Candidate B: structured, thorough, references question terms
+        (
+            "Distributed tracing provides three main benefits for AI agents: "
+            "1. Visibility into which tools were called and in what order. "
+            "2. Latency profiling per span so slow steps are identified. "
+            "3. Error attribution — faults are localized to the exact sub-call that failed."
+        ),
+        # Candidate C: medium length, somewhat relevant
+        (
+            "Using distributed tracing you can see the full call tree of an agent run, "
+            "including tool calls and LLM inference steps, each with their own duration."
+        ),
+    ]
+
+    evaluations = [
+        judge_candidate(f"candidate_{chr(65 + i)}", answer, question)
+        for i, answer in enumerate(candidates)
+    ]
+
+    best = max(evaluations, key=lambda e: e["aggregate"])
+
+    state: JudgeState = {
+        "question": question,
+        "candidates": candidates,
+        "evaluations": evaluations,
+        "best_candidate": best["candidate_id"],
+        "best_score": best["aggregate"],
+    }
+    return "plain Python judge (rubric scoring)", state
+
+
+def render_result(runtime: str, state: JudgeState) -> str:
+    lines = [
+        "Pattern: LLM-as-Judge",
+        f"Runtime: {runtime}",
+        "Mechanic: rubric with named criteria -> per-candidate scores (1-5) -> mean aggregate -> winner",
+        "",
+        f"Question: {state['question'][:80]}",
+        "",
+        "Rubric criteria:",
+        *[f"  {criterion}: {desc}" for criterion, desc in RUBRIC.items()],
+        "",
+        "Evaluations:",
+    ]
+    for ev in state["evaluations"]:
+        lines.append(f"\n  {ev['candidate_id']} (aggregate={ev['aggregate']:.2f}):")
+        lines.append(f"    Answer: \"{ev['answer'][:80]}{'...' if len(ev['answer']) > 80 else ''}\"")
+        for s in ev["scores"]:
+            lines.append(f"    {s['criterion']:10} {s['score']}/5  ({s['rationale']})")
+    lines.extend([
+        "",
+        f"Winner: {state['best_candidate']} with aggregate score {state['best_score']:.2f}",
+    ])
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
     @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langchain(user_prompt)
+    def traced_run(user_prompt: str) -> tuple[str, JudgeState]:
+        return run_plain_python(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["RUBRIC", "judge_candidate", "run_plain_python", "render_result", "run"]

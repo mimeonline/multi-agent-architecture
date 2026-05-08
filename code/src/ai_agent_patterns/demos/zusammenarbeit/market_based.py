@@ -1,127 +1,169 @@
-"""Market-based demo.
+"""Market-based: Budget wird verteilt, Tasks haben Utility, Agents bieten Capacity-Preise.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangGraph custom coordination, AWS Strands custom workflow.
-Pattern idea: Agents priorisieren Arbeit über Budgets, Preise oder Nutzenfunktionen."""
+Der Lernpunkt: Greedy-Marktregel — Tasks nach utility/cost absteigend sortiert, Allocations
+unter Budget-Constraint. Die Allocations-Liste macht sichtbar, welche Tasks wem zugewiesen
+wurden und warum andere unter den Tisch fallen.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
-from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
-
-SLUG = 'market-based'
+from ai_agent_patterns.demos.common import trace_demo, typed_state
 
 
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
+# ---------------------------------------------------------------------------
+# Markt-Datenstrukturen
+# ---------------------------------------------------------------------------
+
+class Task(TypedDict):
+    name: str
+    utility: float   # Wert des Tasks (höher = wertvoller)
+    cost: float      # Ressourcenkosten
+
+
+class Allocation(TypedDict):
+    task: str
+    agent: str
+    utility: float
+    cost: float
+    ratio: float     # utility / cost
+
+
+class MarketState(TypedDict):
+    request: str
+    budget: float
+    tasks: list[Task]
+    allocations: list[Allocation]
+    budget_used: float
     answer: str
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+# ---------------------------------------------------------------------------
+# Agent-Pool mit Capacity-Preisen
+# ---------------------------------------------------------------------------
+
+AGENT_CAPACITY: dict[str, float] = {
+    "agent_gpu_a": 3.0,   # teuer, leistungsstark
+    "agent_gpu_b": 2.0,   # mittel
+    "agent_cpu":   1.0,   # günstig, langsamer
+}
+
+TOTAL_BUDGET = 6.0
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
-
-
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
-    )
-
-
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
-
-
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def define_tasks(request: str) -> list[Task]:
+    """Definiert Tasks aus dem Request — Utilities und Costs sind deterministisch."""
+    return [
+        {"name": "data_preprocessing", "utility": 4.0, "cost": 1.0},
+        {"name": "model_inference",    "utility": 9.0, "cost": 3.0},
+        {"name": "result_aggregation", "utility": 3.0, "cost": 1.0},
+        {"name": "report_generation",  "utility": 2.0, "cost": 2.0},
     ]
-    return {**state, "observations": observations}
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
+# ---------------------------------------------------------------------------
+# Markt-Mechanik
+# ---------------------------------------------------------------------------
+
+def market_define_tasks(state: MarketState) -> MarketState:
+    """Markt initialisiert Tasks aus dem Request."""
+    tasks = define_tasks(state["request"])
+    return {**state, "tasks": tasks}
 
 
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
+def market_allocate(state: MarketState) -> MarketState:
+    """Greedy-Allokation: Tasks nach utility/cost sortiert, günstigster Agent pro Task."""
+    tasks_by_ratio = sorted(
+        state["tasks"],
+        key=lambda t: t["utility"] / t["cost"],
+        reverse=True,
+    )
+    budget_remaining = state["budget"]
+    allocations: list[Allocation] = []
+    agent_names = list(AGENT_CAPACITY.keys())
+    agent_idx = 0
 
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
+    for task in tasks_by_ratio:
+        if task["cost"] > budget_remaining:
+            continue  # Task fällt weg — Budget reicht nicht
+        # Günstigster Agent der noch capacity hat
+        agent = agent_names[agent_idx % len(agent_names)]
+        agent_idx += 1
+        alloc: Allocation = {
+            "task": task["name"],
+            "agent": agent,
+            "utility": task["utility"],
+            "cost": task["cost"],
+            "ratio": round(task["utility"] / task["cost"], 2),
+        }
+        allocations.append(alloc)
+        budget_remaining -= task["cost"]
+
+    budget_used = state["budget"] - budget_remaining
+    answer = (
+        f"Markt hat {len(allocations)} von {len(state['tasks'])} Tasks alloziert "
+        f"bei Budget {state['budget']} (verwendet: {budget_used})."
+    )
+    return {**state, "allocations": allocations, "budget_used": budget_used, "answer": answer}
 
 
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
+# ---------------------------------------------------------------------------
+# Runtime
+# ---------------------------------------------------------------------------
+
+def run_with_langgraph(prompt: str) -> tuple[str, MarketState]:
+    init: MarketState = {
+        "request": prompt,
+        "budget": TOTAL_BUDGET,
+        "tasks": [],
+        "allocations": [],
+        "budget_used": 0.0,
+        "answer": "",
+    }
     try:
         from langgraph.constants import END, START
         from langgraph.graph import StateGraph
     except ImportError:
-        return run_with_langchain(prompt)
+        state = market_allocate(market_define_tasks(init))
+        return "plain Python fallback (langgraph not installed)", state
 
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
+    graph = StateGraph(MarketState)
+    graph.add_node("market_define_tasks", market_define_tasks)
+    graph.add_node("market_allocate", market_allocate)
+    graph.add_edge(START, "market_define_tasks")
+    graph.add_edge("market_define_tasks", "market_allocate")
+    graph.add_edge("market_allocate", END)
+
     app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
+    result: MarketState = typed_state(app.invoke(init))
     return "LangGraph StateGraph", result
 
 
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+def render_result(runtime: str, state: MarketState) -> str:
+    alloc_lines = [
+        f"  {a['task']} -> {a['agent']} "
+        f"(utility={a['utility']}, cost={a['cost']}, ratio={a['ratio']})"
+        for a in state["allocations"]
+    ]
+    return "\n".join([
+        "Pattern: Market-based",
+        f"Runtime: {runtime}",
+        f"Request: {state['request']}",
+        f"Budget: {state['budget']} | Used: {state['budget_used']}",
+        "Allocations (greedy, sorted by utility/cost):",
+        *alloc_lines,
+        f"Answer: {state['answer']}",
+    ])
 
 
 def run(prompt: str) -> str:
-    @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
+    @trace_demo("demo.market-based")
+    def traced_run(user_prompt: str) -> tuple[str, MarketState]:
         return run_with_langgraph(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["run", "run_with_langgraph", "render_result"]

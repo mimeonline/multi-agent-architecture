@@ -1,127 +1,158 @@
-"""Contract Net demo.
+"""Contract Net: Aufgabe wird ausgeschrieben, Worker-Agents geben Bids, Gewinner wird gewählt.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangGraph custom protocol, AutoGen / AG2 custom conversation.
-Pattern idea: Agents bieten auf ausgeschriebene Aufgaben und der beste Anbieter erhält den Auftrag."""
+Der Lernpunkt: Kein festes Routing — der Manager announced eine Aufgabe, Worker
+antworten mit cost/confidence/expertise_match, und eine explizite Auswahlregel
+(günstigstes Bid mit confidence >= Schwellwert) bestimmt den Gewinner.
+"""
 
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import TypedDict, cast
 
-from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
+from ai_agent_patterns.demos.common import trace_demo, typed_state
 
-SLUG = 'contract-net'
-
-
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
-    answer: str
+# ---------------------------------------------------------------------------
+# Bid-Datenstruktur
+# ---------------------------------------------------------------------------
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+class Bid(TypedDict):
+    worker: str
+    cost: float  # niedriger = günstiger
+    confidence: float  # 0.0–1.0
+    expertise_match: str  # "high" | "medium" | "low"
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+class ContractNetState(TypedDict):
+    task: str
+    bids: list[Bid]
+    winner: str
+    result: str
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
-    )
+# ---------------------------------------------------------------------------
+# Worker-Agents — geben je ein Bid ab
+# ---------------------------------------------------------------------------
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+def worker_alpha_bid(task: str) -> Bid:
+    """Worker Alpha: günstig, mittlere Confidence."""
+    return {
+        "worker": "worker_alpha",
+        "cost": 2.0,
+        "confidence": 0.70,
+        "expertise_match": "medium",
+    }
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def worker_beta_bid(task: str) -> Bid:
+    """Worker Beta: teurer, hohe Confidence, passt gut zur Aufgabe."""
+    return {
+        "worker": "worker_beta",
+        "cost": 4.5,
+        "confidence": 0.95,
+        "expertise_match": "high",
+    }
+
+
+def worker_gamma_bid(task: str) -> Bid:
+    """Worker Gamma: billig, aber niedrige Confidence."""
+    return {
+        "worker": "worker_gamma",
+        "cost": 1.0,
+        "confidence": 0.45,
+        "expertise_match": "low",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Manager-Agent-Logik
+# ---------------------------------------------------------------------------
+
+MIN_CONFIDENCE = 0.60  # Bids unter diesem Schwellwert werden verworfen
+
+
+def announce_task(state: ContractNetState) -> ContractNetState:
+    """Manager schreibt die Aufgabe aus und sammelt Bids von allen Workers."""
+    task = state["task"]
+    bids: list[Bid] = [
+        worker_alpha_bid(task),
+        worker_beta_bid(task),
+        worker_gamma_bid(task),
     ]
-    return {**state, "observations": observations}
+    return {**state, "bids": bids}
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
+def select_winner(state: ContractNetState) -> ContractNetState:
+    """Auswahlregel: günstigstes Bid unter qualifizierten Anbietern (confidence >= MIN_CONFIDENCE)."""
+    qualified = [b for b in state["bids"] if b["confidence"] >= MIN_CONFIDENCE]
+    if not qualified:
+        return {**state, "winner": "none — kein Bid erfüllt Mindest-Confidence"}
+    winner_bid = min(qualified, key=lambda b: b["cost"])
+    return {**state, "winner": winner_bid["worker"]}
 
 
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
+def execute_winner(state: ContractNetState) -> ContractNetState:
+    """Gewinner-Worker führt die Aufgabe aus."""
+    result = f"[{state['winner']}] Aufgabe ausgeführt: '{state['task']}'"
+    return {**state, "result": result}
 
 
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
+# ---------------------------------------------------------------------------
+# Runtime
+# ---------------------------------------------------------------------------
+
+
+def run_with_langgraph(prompt: str) -> tuple[str, ContractNetState]:
+    init: ContractNetState = {"task": prompt, "bids": [], "winner": "", "result": ""}
     try:
         from langgraph.constants import END, START
         from langgraph.graph import StateGraph
     except ImportError:
-        return run_with_langchain(prompt)
+        state = execute_winner(select_winner(announce_task(init)))
+        return "plain Python fallback (langgraph not installed)", state
 
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
+    graph = StateGraph(ContractNetState)
+    graph.add_node("announce_task", announce_task)
+    graph.add_node("select_winner", select_winner)
+    graph.add_node("execute_winner", execute_winner)
+    graph.add_edge(START, "announce_task")
+    graph.add_edge("announce_task", "select_winner")
+    graph.add_edge("select_winner", "execute_winner")
+    graph.add_edge("execute_winner", END)
+
     app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
+    result: ContractNetState = typed_state(app.invoke(init))
     return "LangGraph StateGraph", result
 
 
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
+def render_result(runtime: str, state: ContractNetState) -> str:
+    bid_lines = [
+        f"  {b['worker']}: cost={b['cost']}, confidence={b['confidence']}, "
+        f"expertise={b['expertise_match']}"
+        for b in state["bids"]
+    ]
     return "\n".join(
         [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
+            "Pattern: Contract Net",
+            f"Runtime: {runtime}",
+            f"Task: {state['task']}",
+            f"Min-confidence threshold: {MIN_CONFIDENCE}",
+            "Bids:",
+            *bid_lines,
+            f"Winner: {state['winner']}",
+            f"Result: {state['result']}",
         ]
     )
 
 
 def run(prompt: str) -> str:
-    @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
+    @trace_demo("demo.contract-net")
+    def traced_run(user_prompt: str) -> tuple[str, ContractNetState]:
         return run_with_langgraph(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["run", "run_with_langgraph", "render_result"]

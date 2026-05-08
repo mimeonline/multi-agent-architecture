@@ -1,15 +1,18 @@
-"""Sequential Pipeline demo with LangChain prompt chains.
+"""Sequential Pipeline (Prompt Chaining): Fest definierte Schrittfolge, jeder Schritt nimmt den vorherigen Output.
 
-The code runs extract, draft, and polish stages in order. Each stage receives the previous output.
+Der Lernpunkt: `extract → draft → polish` sind eigenständige Funktionen, die eine Kette bilden.
+Kein Schritt entscheidet über den nächsten — die Reihenfolge steht im Code, nicht im Prompt.
 """
 
 from __future__ import annotations
 
+from typing import Any
+
 from ai_agent_patterns.config import pick_model_config
-from ai_agent_patterns.llm import init_langchain_model, is_offline_model
+from ai_agent_patterns.llm import init_langchain_model, is_offline_model, provider_error
 
 
-def _run_langchain_stage(model: object, instruction: str, text: str) -> str:
+def _run_langchain_stage(model: Any, instruction: str, text: str) -> str:
     from langchain_core.output_parsers import StrOutputParser
     from langchain_core.prompts import ChatPromptTemplate
 
@@ -34,11 +37,17 @@ def run(prompt: str) -> str:
     ]
 
     text = prompt
-    transcript = ["Pattern: Sequential pipeline", f"Provider: {config.provider} ({config.reason})"]
+    transcript = ["Pattern: Sequential Pipeline (Prompt Chaining)", f"Provider: {config.provider} ({config.reason})"]
     for name, instruction in stages:
         if is_offline_model(model):
             text = f"{name}: {instruction} Input was: {text[:120]}"
         else:
-            text = _run_langchain_stage(model, instruction, text)
+            try:
+                text = _run_langchain_stage(model, instruction, text)
+            except Exception as exc:
+                text = (
+                    f"{name}: provider call failed ({provider_error(config, exc)}). "
+                    f"Fallback kept input: {text[:120]}"
+                )
         transcript.append(f"{name}: {text}")
     return "\n".join(transcript)

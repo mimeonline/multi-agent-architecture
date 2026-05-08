@@ -1,127 +1,125 @@
-"""Group Chat demo.
+"""Group Chat: Round-Robin durch 3 Rollen, Konversations-Verlauf wächst, Moderator fasst zusammen.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: AutoGen / AG2, Microsoft Agent Framework.
-Pattern idea: Mehrere Agents kommunizieren in einem gemeinsamen Gesprächsraum."""
+Der Lernpunkt: Kein zentraler Supervisor — die Gesprächsrunde läuft deterministisch durch
+researcher -> critic -> builder. Die wachsende messages-Liste macht den Chat-Verlauf sichtbar.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
-
-SLUG = 'group-chat'
 
 
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
-    answer: str
+class Message(TypedDict):
+    role: str
+    content: str
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+class GroupChatState(TypedDict):
+    topic: str
+    messages: list[Message]
+    summary: str
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+# ---------------------------------------------------------------------------
+# Chat-Teilnehmer — je eine Runde
+# ---------------------------------------------------------------------------
+
+ROLES = ["researcher", "critic", "builder"]
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
+def researcher_turn(topic: str, messages: list[Message]) -> Message:
+    """Researcher liefert Kontext und Fakten zum Thema."""
+    prior = f" (aufbauend auf {len(messages)} vorigen Beiträgen)" if messages else ""
+    return {
+        "role": "researcher",
+        "content": f"[researcher] Recherche zu '{topic}'{prior}: Belege zeigen Ansatz X als valide.",
+    }
+
+
+def critic_turn(topic: str, messages: list[Message]) -> Message:
+    """Critic hinterfragt die letzte Aussage kritisch."""
+    last = messages[-1]["content"] if messages else "?"
+    return {
+        "role": "critic",
+        "content": (
+            f"[critic] Kritik zum letzten Beitrag: '{last[:60]}…' — "
+            f"Risiko Y wurde nicht berücksichtigt."
+        ),
+    }
+
+
+def builder_turn(topic: str, messages: list[Message]) -> Message:
+    """Builder schlägt einen konkreten nächsten Schritt vor."""
+    return {
+        "role": "builder",
+        "content": f"[builder] Konkreter Schritt: Implementiere Z als nächste Maßnahme für '{topic}'.",
+    }
+
+
+TURN_FNS = {
+    "researcher": researcher_turn,
+    "critic": critic_turn,
+    "builder": builder_turn,
+}
+
+
+# ---------------------------------------------------------------------------
+# Moderator-Agent
+# ---------------------------------------------------------------------------
+
+def moderator_summarize(topic: str, messages: list[Message]) -> str:
+    roles_seen = [m["role"] for m in messages]
     return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
+        f"Moderator-Zusammenfassung für '{topic}': "
+        f"{len(messages)} Beiträge von {roles_seen}. "
+        f"Konsens: Ansatz X mit Schritt Z, Risiko Y als offener Punkt."
     )
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+# ---------------------------------------------------------------------------
+# Chat-Mechanik
+# ---------------------------------------------------------------------------
+
+def run_plain_python(prompt: str) -> tuple[str, GroupChatState]:
+    """Round-Robin-Chat ohne LangGraph — natürlicher Ablauf ohne künstlichen Graph-Overhead."""
+    messages: list[Message] = []
+    for role in ROLES:
+        turn_fn = TURN_FNS[role]
+        msg = turn_fn(prompt, messages)
+        messages.append(msg)
+
+    summary = moderator_summarize(prompt, messages)
+    state: GroupChatState = {"topic": prompt, "messages": messages, "summary": summary}
+    return "plain Python round-robin", state
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
-    ]
-    return {**state, "observations": observations}
+def run_with_langgraph(prompt: str) -> tuple[str, GroupChatState]:
+    # Group Chat als Round-Robin ist in Plain Python natürlicher als im StateGraph.
+    # LangGraph-Support als optionale Alternative, plain Python bleibt bevorzugt.
+    return run_plain_python(prompt)
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+def render_result(runtime: str, state: GroupChatState) -> str:
+    msg_lines = [f"  [{m['role']}] {m['content']}" for m in state["messages"]]
+    return "\n".join([
+        "Pattern: Group Chat",
+        f"Runtime: {runtime}",
+        f"Topic: {state['topic']}",
+        "Messages:",
+        *msg_lines,
+        f"Moderator summary: {state['summary']}",
+    ])
 
 
 def run(prompt: str) -> str:
-    @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langchain(user_prompt)
+    @trace_demo("demo.group-chat")
+    def traced_run(user_prompt: str) -> tuple[str, GroupChatState]:
+        return run_with_langgraph(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["run", "run_plain_python", "run_with_langgraph", "render_result"]

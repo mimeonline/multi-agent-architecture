@@ -1,127 +1,132 @@
-"""Swarm demo.
+"""Swarm: Dezentrale Peer-Agents schlagen je eine Aktion vor, Konsens-Regel bestimmt Ergebnis.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangGraph Swarm, AWS Strands.
-Pattern idea: Agents koordinieren sich dezentral über lokale Regeln und geteilte Ziele."""
+Der Lernpunkt: Kein zentraler Manager — jeder Peer wendet eine lokale Heuristik an.
+Über mehrere Iterationen mit Budget sammelt ein Konsens-Mechanismus (häufigster Vorschlag)
+die emergente Gruppenentscheidung. Peer-Vorschläge je Iteration sind explizit sichtbar.
+"""
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
-
-SLUG = 'swarm'
 
 
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
+class PeerProposal(TypedDict):
+    peer: str
+    action: str
+    priority: int   # lokale Einschätzung des Peers (1=niedrig, 3=hoch)
+
+
+class SwarmIteration(TypedDict):
+    iteration: int
+    proposals: list[PeerProposal]
+    consensus: str
+
+
+class SwarmState(TypedDict):
+    task: str
+    iterations: list[SwarmIteration]
+    final_consensus: str
     answer: str
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+# ---------------------------------------------------------------------------
+# Peer-Agents — lokale Heuristiken
+# ---------------------------------------------------------------------------
+
+PEERS = ["scout_a", "scout_b", "scout_c"]
+
+# Aktionskatalog je Peer — deterministisch, keine LLM-Calls
+_PEER_ACTIONS: dict[str, list[str]] = {
+    "scout_a": ["fetch_source_1", "fetch_source_2", "validate_cache"],
+    "scout_b": ["fetch_source_2", "fetch_source_3", "fetch_source_1"],
+    "scout_c": ["validate_cache", "fetch_source_1", "fetch_source_2"],
+}
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+def peer_propose(peer: str, task: str, iteration: int) -> PeerProposal:
+    """Peer schlägt eine Aktion vor — lokale Heuristik rotiert durch Aktionskatalog."""
+    actions = _PEER_ACTIONS[peer]
+    action = actions[iteration % len(actions)]
+    priority = (iteration % 3) + 1
+    return {"peer": peer, "action": action, "priority": priority}
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
+# ---------------------------------------------------------------------------
+# Konsens-Mechanismus
+# ---------------------------------------------------------------------------
+
+def consensus_rule(proposals: list[PeerProposal]) -> str:
+    """Häufigster Vorschlag (plurality vote) unter den Peer-Aktionen."""
+    action_counts: Counter[str] = Counter(p["action"] for p in proposals)
+    return action_counts.most_common(1)[0][0]
+
+
+# ---------------------------------------------------------------------------
+# Swarm-Iterationen
+# ---------------------------------------------------------------------------
+
+MAX_ITERATIONS = 3
+
+
+def run_plain_python(prompt: str) -> tuple[str, SwarmState]:
+    """Swarm-Loop ohne LangGraph — dezentrale Koordination über Iterationen."""
+    iterations: list[SwarmIteration] = []
+
+    for i in range(MAX_ITERATIONS):
+        proposals = [peer_propose(peer, prompt, i) for peer in PEERS]
+        consensus = consensus_rule(proposals)
+        iterations.append({"iteration": i + 1, "proposals": proposals, "consensus": consensus})
+
+    # Finaler Konsens: häufigster Konsens über alle Iterationen
+    final_consensus = Counter(it["consensus"] for it in iterations).most_common(1)[0][0]
+    answer = (
+        f"Swarm ({len(PEERS)} Peers, {MAX_ITERATIONS} Iterationen) "
+        f"hat Konsens '{final_consensus}' für Task '{prompt}' erreicht."
     )
+    state: SwarmState = {
+        "task": prompt,
+        "iterations": iterations,
+        "final_consensus": final_consensus,
+        "answer": answer,
+    }
+    return "plain Python swarm loop", state
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+def run_with_langgraph(prompt: str) -> tuple[str, SwarmState]:
+    # Swarm als iterativer Loop ist in Plain Python natürlicher als im StateGraph.
+    return run_plain_python(prompt)
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
-    ]
-    return {**state, "observations": observations}
+def render_result(runtime: str, state: SwarmState) -> str:
+    iter_lines: list[str] = []
+    for it in state["iterations"]:
+        proposals_str = ", ".join(
+            f"{p['peer']}={p['action']}(prio={p['priority']})" for p in it["proposals"]
+        )
+        iter_lines.append(f"  Iter {it['iteration']}: [{proposals_str}] -> consensus='{it['consensus']}'")
 
-
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+    return "\n".join([
+        "Pattern: Swarm",
+        f"Runtime: {runtime}",
+        f"Task: {state['task']}",
+        f"Peers: {PEERS}",
+        "Iterations:",
+        *iter_lines,
+        f"Final consensus: {state['final_consensus']}",
+        f"Answer: {state['answer']}",
+    ])
 
 
 def run(prompt: str) -> str:
-    @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
+    @trace_demo("demo.swarm")
+    def traced_run(user_prompt: str) -> tuple[str, SwarmState]:
         return run_with_langgraph(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["run", "run_plain_python", "run_with_langgraph", "render_result"]

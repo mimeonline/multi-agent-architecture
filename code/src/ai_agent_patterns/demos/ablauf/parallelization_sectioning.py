@@ -1,116 +1,125 @@
-"""Parallelization (Sectioning) demo.
+"""Parallelization (Sectioning): Eingabe in unabhängige Abschnitte zerlegen, jeden separat verarbeiten.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangGraph, LangChain RunnableParallel.
-Pattern idea: Unabhängige Segmente werden parallel verarbeitet und danach zusammengeführt."""
+Der Lernpunkt: Sektionen kennen einander nie — jede läuft isoliert. Ein `consolidator`-Schritt
+führt die Teilresultate am Ende zusammen. Die Abschnittsgrenze ist die sichtbare Parallelitätseinheit.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
-from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
-
-SLUG = 'parallelization-sectioning'
+from ai_agent_patterns.demos.common import trace_demo, typed_state
 
 
-class DemoState(TypedDict):
+class Section(TypedDict):
+    id: str
+    focus: str
+    content: str
+
+
+class SectioningState(TypedDict):
     prompt: str
-    plan: list[str]
-    observations: list[str]
+    sections: list[Section]
+    section_results: dict[str, str]
     answer: str
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+# ── Decompose ─────────────────────────────────────────────────────────────────
 
-
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
-
-
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
-    )
-
-
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
-
-
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def decompose_into_sections(prompt: str) -> list[Section]:
+    """Split the prompt into named sections, each with an independent focus."""
+    words = prompt.split()
+    third = max(1, len(words) // 3)
+    return [
+        Section(id="introduction", focus="context and background",
+                content=" ".join(words[:third])),
+        Section(id="main_body",    focus="core analysis",
+                content=" ".join(words[third : 2 * third])),
+        Section(id="conclusion",   focus="implications and next steps",
+                content=" ".join(words[2 * third :])),
     ]
-    return {**state, "observations": observations}
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
+# ── Section workers ───────────────────────────────────────────────────────────
+
+def process_section(section: Section) -> str:
+    """Process one section independently (in production this runs in parallel for all sections)."""
+    word_count = len(section["content"].split())
+    preview = section["content"][:40].rstrip() + ("…" if len(section["content"]) > 40 else "")
+    return f"[{section['id']}] focus={section['focus']!r}, words={word_count}, preview={preview!r}"
 
 
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
+# ── Consolidate ───────────────────────────────────────────────────────────────
 
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
+def consolidate(section_results: dict[str, str]) -> str:
+    """Merge section outputs into a single coherent result."""
+    parts = [f"  {sid}: {result}" for sid, result in section_results.items()]
+    return "Consolidated {} section(s):\n".format(len(section_results)) + "\n".join(parts)
 
 
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
+# ── Graph nodes ───────────────────────────────────────────────────────────────
+
+def decompose_node(state: SectioningState) -> SectioningState:
+    sections = decompose_into_sections(state["prompt"])
+    return {**state, "sections": sections}
+
+
+def process_sections_node(state: SectioningState) -> SectioningState:
+    # Each section is processed independently — parallel in production
+    results = {s["id"]: process_section(s) for s in state["sections"]}
+    return {**state, "section_results": results}
+
+
+def consolidate_node(state: SectioningState) -> SectioningState:
+    return {**state, "answer": consolidate(state["section_results"])}
+
+
+# ── Runtime ───────────────────────────────────────────────────────────────────
+
+def run_with_langgraph(prompt: str) -> tuple[str, SectioningState]:
     try:
         from langgraph.constants import END, START
         from langgraph.graph import StateGraph
     except ImportError:
-        return run_with_langchain(prompt)
+        state: SectioningState = {
+            "prompt": prompt, "sections": [], "section_results": {}, "answer": "",
+        }
+        state = consolidate_node(process_sections_node(decompose_node(state)))
+        return "plain Python fallback because langgraph is not installed", state
 
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
+    graph = StateGraph(SectioningState)
+    graph.add_node("decompose", decompose_node)
+    graph.add_node("process_sections", process_sections_node)
+    graph.add_node("consolidate", consolidate_node)
+    graph.add_edge(START, "decompose")
+    graph.add_edge("decompose", "process_sections")
+    graph.add_edge("process_sections", "consolidate")
+    graph.add_edge("consolidate", END)
+
     app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
+    result: SectioningState = typed_state(app.invoke({"prompt": prompt, "sections": [], "section_results": {}, "answer": ""}))
     return "LangGraph StateGraph", result
 
 
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+def render_result(runtime: str, state: SectioningState) -> str:
+    section_ids = [s["id"] for s in state["sections"]]
+    lines = [
+        "Pattern: Parallelization (Sectioning)",
+        f"Runtime: {runtime} with optional LangSmith tracing",
+        f"Input: {state['prompt'][:80]}{'...' if len(state['prompt']) > 80 else ''}",
+        f"Sections identified: {section_ids}",
+        "── per-section results (each processed independently) ──",
+    ]
+    for sid, result in state["section_results"].items():
+        lines.append(f"  {result}")
+    lines.append("── consolidation ──")
+    lines.append(state["answer"])
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
-    @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
+    @trace_demo("demo.parallelization-sectioning")
+    def traced_run(user_prompt: str) -> tuple[str, SectioningState]:
         return run_with_langgraph(user_prompt)
 
     runtime, state = traced_run(prompt)
@@ -118,10 +127,10 @@ def run(prompt: str) -> str:
 
 
 __all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
+    "decompose_into_sections",
+    "process_section",
+    "consolidate",
     "run_with_langgraph",
+    "render_result",
     "run",
 ]

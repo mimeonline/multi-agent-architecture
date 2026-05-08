@@ -1,127 +1,181 @@
-"""Capability Routing demo.
+"""Capability Routing: Vor dem LLM-Call wird klassifiziert, welche Fähigkeiten die Anfrage braucht.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangGraph, OpenAI Agents SDK.
-Pattern idea: Anfragen werden anhand benötigter Fähigkeiten an passende Tools geleitet."""
+Der Lernpunkt: Jedes Tool trägt ein Set von Capability-Tags; der Router extrahiert die
+benötigte Capability aus dem Prompt und liefert nur die passenden Tools zurück — das Modell
+sieht 5 statt 50 Tools.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
 
-SLUG = 'capability-routing'
+SLUG = "capability-routing"
 
 
-class DemoState(TypedDict):
+class CapabilityTool(TypedDict):
+    name: str
+    description: str
+    capabilities: set[str]
+
+
+class CapabilityRoutingState(TypedDict):
     prompt: str
-    plan: list[str]
-    observations: list[str]
+    required_capability: str
+    all_tools: list[CapabilityTool]
+    routed_tools: list[CapabilityTool]
+    selected_tool: CapabilityTool | None
     answer: str
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+TOOL_CATALOG: list[CapabilityTool] = [
+    {
+        "name": "get_invoice",
+        "description": "Retrieve an invoice by ID.",
+        "capabilities": {"billing", "read"},
+    },
+    {
+        "name": "create_invoice",
+        "description": "Create a new invoice for a customer.",
+        "capabilities": {"billing", "write"},
+    },
+    {
+        "name": "list_users",
+        "description": "List all users in the system.",
+        "capabilities": {"admin", "read"},
+    },
+    {
+        "name": "delete_user",
+        "description": "Delete a user account.",
+        "capabilities": {"admin", "write", "destructive"},
+    },
+    {
+        "name": "send_notification",
+        "description": "Send an email or push notification.",
+        "capabilities": {"messaging", "write"},
+    },
+    {
+        "name": "get_report",
+        "description": "Generate a usage or billing report.",
+        "capabilities": {"billing", "analytics", "read"},
+    },
+]
+
+_CAPABILITY_KEYWORDS: dict[str, str] = {
+    "invoice": "billing",
+    "bill": "billing",
+    "payment": "billing",
+    "user": "admin",
+    "account": "admin",
+    "delete": "destructive",
+    "remove": "destructive",
+    "notify": "messaging",
+    "email": "messaging",
+    "report": "analytics",
+    "analytics": "analytics",
+    "read": "read",
+    "list": "read",
+    "create": "write",
+    "update": "write",
+    "send": "messaging",
+}
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+def extract_required_capability(state: CapabilityRoutingState) -> CapabilityRoutingState:
+    """Detect the most relevant capability from the prompt."""
+    tokens = [t.lower().strip("?.,!") for t in state["prompt"].split()]
+    for token in tokens:
+        cap = _CAPABILITY_KEYWORDS.get(token)
+        if cap:
+            return {**state, "required_capability": cap}
+    return {**state, "required_capability": "read"}  # safe default
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
-    )
+def route_to_capable_tools(state: CapabilityRoutingState) -> CapabilityRoutingState:
+    """Filter tool catalog to those that have the required capability tag."""
+    cap = state["required_capability"]
+    routed = [tool for tool in state["all_tools"] if cap in tool["capabilities"]]
+    return {**state, "routed_tools": routed}
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+def select_best_tool(state: CapabilityRoutingState) -> CapabilityRoutingState:
+    """Pick the first routed tool as the selected tool (mock model decision)."""
+    selected = state["routed_tools"][0] if state["routed_tools"] else None
+    return {**state, "selected_tool": selected}
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def compose_routing_answer(state: CapabilityRoutingState) -> CapabilityRoutingState:
+    if state["selected_tool"]:
+        tool = state["selected_tool"]
+        answer = (
+            f"Capability Routing: prompt required capability '{state['required_capability']}' -> "
+            f"routed to {len(state['routed_tools'])} tool(s) -> selected '{tool['name']}': {tool['description']}"
+        )
+    else:
+        answer = f"No tool found with capability '{state['required_capability']}'."
+    return {**state, "answer": answer}
+
+
+def run_plain_python(prompt: str) -> CapabilityRoutingState:
+    state: CapabilityRoutingState = {
+        "prompt": prompt,
+        "required_capability": "",
+        "all_tools": list(TOOL_CATALOG),
+        "routed_tools": [],
+        "selected_tool": None,
+        "answer": "",
+    }
+    state = extract_required_capability(state)
+    state = route_to_capable_tools(state)
+    state = select_best_tool(state)
+    return compose_routing_answer(state)
+
+
+def render_result(runtime: str, state: CapabilityRoutingState) -> str:
+    lines = [
+        "Pattern: Capability Routing",
+        f"Runtime: {runtime}",
+        f"Prompt: {state['prompt']}",
+        "",
+        f"Tool catalog ({len(state['all_tools'])} tools with capability tags):",
     ]
-    return {**state, "observations": observations}
-
-
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+    for tool in state["all_tools"]:
+        caps = ", ".join(sorted(tool["capabilities"]))
+        lines.append(f"  {tool['name']:25s} capabilities=[{caps}]  — {tool['description']}")
+    lines += [
+        "",
+        f"Required capability (extracted from prompt): '{state['required_capability']}'",
+        f"Routed tools ({len(state['routed_tools'])}):",
+    ]
+    for tool in state["routed_tools"]:
+        lines.append(f"  -> {tool['name']}")
+    lines += [
+        f"Selected: {state['selected_tool']['name'] if state['selected_tool'] else 'none'}",
+        "",
+        f"Answer: {state['answer']}",
+    ]
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
     @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langgraph(user_prompt)
+    def traced_run(user_prompt: str) -> tuple[str, CapabilityRoutingState]:
+        return "plain Python", run_plain_python(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
 __all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
+    "CapabilityTool",
+    "CapabilityRoutingState",
+    "TOOL_CATALOG",
+    "extract_required_capability",
+    "route_to_capable_tools",
+    "select_best_tool",
+    "compose_routing_answer",
+    "run_plain_python",
+    "render_result",
     "run",
 ]

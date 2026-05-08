@@ -1,14 +1,16 @@
-"""Reflexion demo as generator, evaluator, and optimizer loop.
+"""Reflexion: Der Agent erzeugt eine Antwort, kritisiert sie selbst und überarbeitet daraufhin.
 
-The code uses LangGraph when available. The fallback keeps the same loop visible without dependencies.
+Der Lernpunkt: `generator`, `reflector` und Revision sind drei explizite Schritte in einer
+Schleife. `critique["ok"]` ist die Abbruchbedingung — schlägt sie fehl, fließt `feedback`
+als neuer Prompt in den nächsten Generator-Aufruf.
 """
 
 from __future__ import annotations
 
 from typing import TypedDict
 
-from ai_agent_patterns.config import pick_model_config
-from ai_agent_patterns.llm import init_langchain_model, is_offline_model
+from ai_agent_patterns.config import ModelConfig, pick_model_config
+from ai_agent_patterns.llm import init_langchain_model, invoke_model_text, is_offline_model, provider_error
 
 
 class ReflectionState(TypedDict):
@@ -29,18 +31,24 @@ def _score(text: str) -> tuple[int, str]:
     return score, verdict
 
 
-def _draft_node(model: object):
+def _draft_node(model: object, config: ModelConfig):
     def draft(state: ReflectionState) -> dict[str, str | list[str]]:
         if is_offline_model(model):
             text = f"Draft: {state['prompt'].strip()} Next, validate it against a simple rubric."
         else:
-            response = model.invoke(
-                [
-                    {"role": "system", "content": "Draft a concise answer. Include one concrete next step."},
-                    {"role": "user", "content": state["prompt"]},
-                ]
-            )
-            text = response.content
+            try:
+                text = invoke_model_text(
+                    model,
+                    [
+                        {"role": "system", "content": "Draft a concise answer. Include one concrete next step."},
+                        {"role": "user", "content": state["prompt"]},
+                    ],
+                )
+            except Exception as exc:
+                text = (
+                    f"Draft: {state['prompt'].strip()} Next, validate it against a simple rubric. "
+                    f"Provider fallback because {provider_error(config, exc)}."
+                )
         return {"draft": text, "trace": state.get("trace", []) + ["generator produced draft"]}
 
     return draft
@@ -59,21 +67,27 @@ def _decide(state: ReflectionState) -> str:
     return "revise" if state["verdict"] == "revise" else "finish"
 
 
-def _revise_node(model: object):
+def _revise_node(model: object, config: ModelConfig):
     def revise(state: ReflectionState) -> dict[str, str | list[str]]:
         if is_offline_model(model):
             final = f"{state['draft'].rstrip('.')}. Next, make the recommendation explicit."
         else:
-            response = model.invoke(
-                [
-                    {"role": "system", "content": "Revise the draft using the evaluator feedback. Keep it concise."},
-                    {
-                        "role": "user",
-                        "content": f"Original request: {state['prompt']}\nDraft: {state['draft']}\nVerdict: {state['verdict']}",
-                    },
-                ]
-            )
-            final = response.content
+            try:
+                final = invoke_model_text(
+                    model,
+                    [
+                        {"role": "system", "content": "Revise the draft using the evaluator feedback. Keep it concise."},
+                        {
+                            "role": "user",
+                            "content": f"Original request: {state['prompt']}\nDraft: {state['draft']}\nVerdict: {state['verdict']}",
+                        },
+                    ],
+                )
+            except Exception as exc:
+                final = (
+                    f"{state['draft'].rstrip('.')}. Next, make the recommendation explicit. "
+                    f"Provider fallback because {provider_error(config, exc)}."
+                )
         return {"final": final, "trace": state.get("trace", []) + ["optimizer revised draft"]}
 
     return revise
@@ -94,18 +108,24 @@ def run(prompt: str) -> str:
         if is_offline_model(model):
             draft = f"Draft: {prompt.strip()} Next, validate it against a simple rubric."
         else:
-            response = model.invoke(
-                [
-                    {"role": "system", "content": "Draft a concise answer. Include one concrete next step."},
-                    {"role": "user", "content": prompt},
-                ]
-            )
-            draft = response.content
+            try:
+                draft = invoke_model_text(
+                    model,
+                    [
+                        {"role": "system", "content": "Draft a concise answer. Include one concrete next step."},
+                        {"role": "user", "content": prompt},
+                    ],
+                )
+            except Exception as exc:
+                draft = (
+                    f"Draft: {prompt.strip()} Next, validate it against a simple rubric. "
+                    f"Provider fallback because {provider_error(config, exc)}."
+                )
         score, verdict = _score(draft)
         final = f"{draft.rstrip('.')}. Next, make the recommendation explicit." if verdict == "revise" else draft
         return "\n".join(
             [
-                "Pattern: Reflection / evaluator",
+                "Pattern: Reflexion",
                 "Runtime: fallback without LangGraph",
                 f"Evaluator score: {score}/3 ({verdict})",
                 f"Final: {final}",
@@ -113,9 +133,9 @@ def run(prompt: str) -> str:
         )
 
     graph = StateGraph(ReflectionState)
-    graph.add_node("draft", _draft_node(model))
+    graph.add_node("draft", _draft_node(model, config))
     graph.add_node("evaluate", _evaluate_node)
-    graph.add_node("revise", _revise_node(model))
+    graph.add_node("revise", _revise_node(model, config))
     graph.add_node("finish", _finish_node)
     graph.add_edge(START, "draft")
     graph.add_edge("draft", "evaluate")
@@ -137,7 +157,7 @@ def run(prompt: str) -> str:
 
     return "\n".join(
         [
-            "Pattern: Reflection / evaluator",
+            "Pattern: Reflexion",
             "Runtime: LangGraph StateGraph with generator, evaluator, optimizer",
             f"Evaluator score: {result['score']}/3 ({result['verdict']})",
             "Trace: " + " -> ".join(result["trace"]),

@@ -73,6 +73,15 @@ agent-patterns list
 agent-patterns list --plain
 ```
 
+Interaktives Terminal-Menü starten:
+
+```bash
+agent-patterns menu
+agent-patterns tui
+```
+
+Das Menü zeigt alle Patterns nach Domäne sortiert. Nach Auswahl per Nummer wird das Pattern mit einem passenden Beispielprompt gestartet. Der vorgeschlagene Prompt kann direkt übernommen oder überschrieben werden.
+
 Alle Demos ausführen:
 
 ```bash

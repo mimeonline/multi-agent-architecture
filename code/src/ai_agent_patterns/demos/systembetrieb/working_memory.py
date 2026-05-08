@@ -1,127 +1,109 @@
-"""Working Memory / Scratchpad demo.
+"""Working Memory / Scratchpad: Pro Aufgabe ein flüchtiger Notizblock für Tool-Ergebnisse und Zwischengedanken.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangGraph State, OpenAI Agents SDK.
-Pattern idea: Kurzfristiger Arbeitszustand hält Zwischenschritte eines Laufs."""
+Der Lernpunkt: Das Scratchpad wächst während einer Aufgabe durch mehrere Sub-Steps; der
+finale Syntheseschritt liest das gesamte Scratchpad. Mit Aufgabenende wird es verworfen —
+kein Persistent-Store, reines Kurzzeitgedächtnis.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
 
-SLUG = 'working-memory'
+SLUG = "working-memory"
 
 
-class DemoState(TypedDict):
+class ScratchEntry(TypedDict):
+    step: str
+    note: str
+
+
+class WorkingMemoryState(TypedDict):
     prompt: str
-    plan: list[str]
-    observations: list[str]
+    scratchpad: list[ScratchEntry]
     answer: str
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+def parse_task(state: WorkingMemoryState) -> WorkingMemoryState:
+    """Break the prompt into sub-tasks and write the parse result to scratchpad."""
+    words = state["prompt"].split()
+    entry: ScratchEntry = {
+        "step": "parse_task",
+        "note": f"Identified {len(words)} tokens. First token: '{words[0] if words else ''}'.",
+    }
+    return {**state, "scratchpad": state["scratchpad"] + [entry]}
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+def fetch_tool_result(state: WorkingMemoryState) -> WorkingMemoryState:
+    """Simulate a tool call and write the (fake) result to scratchpad."""
+    topic = state["prompt"].split()[0] if state["prompt"].split() else "unknown"
+    entry: ScratchEntry = {
+        "step": "fetch_tool_result",
+        "note": f"Tool lookup for '{topic}' returned: definition_v1 (mocked, no LLM).",
+    }
+    return {**state, "scratchpad": state["scratchpad"] + [entry]}
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
+def compute_intermediate_result(state: WorkingMemoryState) -> WorkingMemoryState:
+    """Derive an intermediate conclusion from scratchpad notes and append it."""
+    all_notes = "; ".join(e["note"] for e in state["scratchpad"])
+    entry: ScratchEntry = {
+        "step": "intermediate_result",
+        "note": f"Combined observations: [{all_notes}].",
+    }
+    return {**state, "scratchpad": state["scratchpad"] + [entry]}
+
+
+def synthesize_from_scratchpad(state: WorkingMemoryState) -> WorkingMemoryState:
+    """Read the full scratchpad to compose the final answer."""
+    steps_summary = ", ".join(e["step"] for e in state["scratchpad"])
+    answer = (
+        f"Working Memory / Scratchpad completed {len(state['scratchpad'])} steps ({steps_summary}). "
+        f"Final note: {state['scratchpad'][-1]['note']}"
     )
+    return {**state, "answer": answer}
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+def run_plain_python(prompt: str) -> WorkingMemoryState:
+    state: WorkingMemoryState = {"prompt": prompt, "scratchpad": [], "answer": ""}
+    state = parse_task(state)
+    state = fetch_tool_result(state)
+    state = compute_intermediate_result(state)
+    return synthesize_from_scratchpad(state)
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def render_result(runtime: str, state: WorkingMemoryState) -> str:
+    lines = [
+        "Pattern: Working Memory / Scratchpad",
+        f"Runtime: {runtime}",
+        f"Prompt: {state['prompt']}",
+        "",
+        f"Scratchpad ({len(state['scratchpad'])} entries):",
     ]
-    return {**state, "observations": observations}
-
-
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+    for i, entry in enumerate(state["scratchpad"], 1):
+        lines.append(f"  [{i}] {entry['step']}: {entry['note']}")
+    lines += ["", f"Answer: {state['answer']}"]
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
     @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langgraph(user_prompt)
+    def traced_run(user_prompt: str) -> tuple[str, WorkingMemoryState]:
+        return "plain Python", run_plain_python(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
 __all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
+    "ScratchEntry",
+    "WorkingMemoryState",
+    "parse_task",
+    "fetch_tool_result",
+    "compute_intermediate_result",
+    "synthesize_from_scratchpad",
+    "run_plain_python",
+    "render_result",
     "run",
 ]

@@ -1,127 +1,116 @@
-"""Actor Model demo.
+"""Actor Model: Isolierte Einheiten mit eigenem Zustand kommunizieren ausschließlich über Nachrichten.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: Ray actors, Microsoft Agent Framework.
-Pattern idea: Agents kapseln Zustand und kommunizieren über Nachrichten."""
+Der Lernpunkt: Jeder Actor besitzt eine `inbox: Queue` und ein eigenes `state`-Dict — kein
+Shared Memory. Kommunikation läuft nur über `inbox.put(msg)`, nie über direkte Referenzen
+auf fremde States.
+"""
 
 from __future__ import annotations
 
+import queue
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
 
-SLUG = 'actor-model'
-
-
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
-    answer: str
+SLUG = "actor-model"
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+class Message(TypedDict):
+    sender: str
+    topic: str
+    payload: object
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+class ActorState(TypedDict):
+    actor_a_state: dict[str, object]
+    actor_b_state: dict[str, object]
+    message_log: list[str]
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
-    )
+class Actor:
+    def __init__(self, name: str, initial_state: dict[str, object]) -> None:
+        self.name = name
+        self.state: dict[str, object] = dict(initial_state)
+        self.inbox: queue.Queue[Message] = queue.Queue()
+        self._other: "Actor | None" = None
+
+    def link(self, other: "Actor") -> None:
+        self._other = other
+
+    def send(self, topic: str, payload: object) -> None:
+        if self._other is not None:
+            self._other.inbox.put({"sender": self.name, "topic": topic, "payload": payload})
+
+    def _counter(self, name: str) -> int:
+        value = self.state.get(name, 0)
+        return value if isinstance(value, int) else 0
+
+    def process(self) -> list[str]:
+        log: list[str] = []
+        while not self.inbox.empty():
+            msg: Message = self.inbox.get_nowait()
+            log.append(f"[{self.name}] received '{msg['topic']}' from {msg['sender']}: {msg['payload']}")
+            if msg["topic"] == "ping":
+                self.state["pings_received"] = self._counter("pings_received") + 1
+                self.send("pong", {"echo": msg["payload"], "count": self.state["pings_received"]})
+            elif msg["topic"] == "pong":
+                self.state["pongs_received"] = self._counter("pongs_received") + 1
+                self.state["last_echo"] = msg["payload"]
+        return log
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+def run_plain_python(prompt: str) -> tuple[str, ActorState]:
+    actor_a = Actor("ActorA", {"role": "initiator", "pings_sent": 0, "pongs_received": 0})
+    actor_b = Actor("ActorB", {"role": "responder", "pings_received": 0})
+    actor_a.link(actor_b)
+    actor_b.link(actor_a)
+
+    message_log: list[str] = []
+
+    # Round 1: A pings B
+    actor_a.state["pings_sent"] = actor_a._counter("pings_sent") + 1
+    actor_a.send("ping", {"request": prompt[:40], "seq": 1})
+    message_log.extend(actor_b.process())  # B processes ping, sends pong
+
+    # Round 2: A receives pong
+    message_log.extend(actor_a.process())  # A processes pong
+
+    # Round 3: A sends second ping
+    actor_a.state["pings_sent"] = actor_a._counter("pings_sent") + 1
+    actor_a.send("ping", {"request": "follow-up", "seq": 2})
+    message_log.extend(actor_b.process())
+    message_log.extend(actor_a.process())
+
+    state: ActorState = {
+        "actor_a_state": dict(actor_a.state),
+        "actor_b_state": dict(actor_b.state),
+        "message_log": message_log,
+    }
+    return "plain Python actors (Queue-based)", state
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def render_result(runtime: str, state: ActorState) -> str:
+    lines = [
+        "Pattern: Actor Model",
+        f"Runtime: {runtime}",
+        "Mechanic: isolated state + message-passing inbox (no shared memory)",
+        "",
+        "Message log (round-trips):",
+        *[f"  {entry}" for entry in state["message_log"]],
+        "",
+        f"ActorA final state: {state['actor_a_state']}",
+        f"ActorB final state: {state['actor_b_state']}",
     ]
-    return {**state, "observations": observations}
-
-
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
     @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langchain(user_prompt)
+    def traced_run(user_prompt: str) -> tuple[str, ActorState]:
+        return run_plain_python(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["Actor", "run_plain_python", "render_result", "run"]

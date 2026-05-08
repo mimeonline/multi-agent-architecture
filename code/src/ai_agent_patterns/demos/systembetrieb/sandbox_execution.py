@@ -1,127 +1,145 @@
-"""Sandbox Execution demo.
+"""Sandbox Execution: Agentengenerierter Code läuft in einer abgeschotteten Umgebung mit harten Limits.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: OpenAI sandboxed tools, Docker, E2B.
-Pattern idea: Code oder Aktionen laufen isoliert mit begrenzten Rechten."""
+Der Lernpunkt: Ein AST-Pre-Scan blockiert verbotene Imports und Builtins, bevor `exec()`
+mit einem minimalen `globals`-Dict läuft. Sichere Snippets passieren; gefährliche werden
+vor der Ausführung abgefangen.
+"""
 
 from __future__ import annotations
 
+import ast
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
 
-SLUG = 'sandbox-execution'
+SLUG = "sandbox-execution"
 
+SAFE_BUILTINS = {
+    "abs": abs,
+    "len": len,
+    "max": max,
+    "min": min,
+    "range": range,
+    "round": round,
+    "sorted": sorted,
+    "sum": sum,
+    "int": int,
+    "float": float,
+    "str": str,
+    "list": list,
+    "dict": dict,
+    "bool": bool,
+    "print": print,
+}
 
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
-    answer: str
-
-
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
-
-
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
-
-
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
-    )
+FORBIDDEN_NAMES = {"os", "sys", "subprocess", "socket", "open", "eval", "exec", "compile", "__import__"}
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+class SandboxResult(TypedDict):
+    code: str
+    allowed: bool
+    block_reason: str | None
+    output: object
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+class SandboxState(TypedDict):
+    results: list[SandboxResult]
+
+
+class Sandbox:
+    def __init__(self, timeout_ms: int = 500, network: bool = False) -> None:
+        self.timeout_ms = timeout_ms
+        self.network = network
+
+    def _ast_check(self, code: str) -> str | None:
+        """Return block reason string if code is forbidden, else None."""
+        try:
+            tree = ast.parse(code)
+        except SyntaxError as exc:
+            return f"SyntaxError: {exc}"
+
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    name = alias.name.split(".")[0]
+                    if name in FORBIDDEN_NAMES:
+                        return f"forbidden import: '{name}'"
+            if isinstance(node, ast.ImportFrom):
+                module = (node.module or "").split(".")[0]
+                if module in FORBIDDEN_NAMES:
+                    return f"forbidden import from: '{module}'"
+            if isinstance(node, ast.Name) and node.id in FORBIDDEN_NAMES:
+                return f"forbidden name: '{node.id}'"
+            if isinstance(node, ast.Call):
+                if isinstance(node.func, ast.Name) and node.func.id in FORBIDDEN_NAMES:
+                    return f"forbidden call: '{node.func.id}'"
+        return None
+
+    def run(self, code: str) -> SandboxResult:
+        block_reason = self._ast_check(code)
+        if block_reason:
+            return SandboxResult(code=code, allowed=False, block_reason=block_reason, output=None)
+
+        restricted_globals: dict[str, object] = {"__builtins__": SAFE_BUILTINS}
+        local_vars: dict[str, object] = {}
+        try:
+            exec(code, restricted_globals, local_vars)  # noqa: S102
+            output = local_vars.get("result", "(no result variable set)")
+        except Exception as exc:
+            output = f"RuntimeError: {exc}"
+
+        return SandboxResult(code=code, allowed=True, block_reason=None, output=output)
+
+
+def run_plain_python(prompt: str) -> tuple[str, SandboxState]:
+    sandbox = Sandbox(timeout_ms=500, network=False)
+
+    snippets = [
+        # Safe: arithmetic
+        "result = sum(range(1, 11))",
+        # Safe: string manipulation
+        f"result = str(len('{prompt[:20]}')) + ' chars'",
+        # Dangerous: network import
+        "import socket\nresult = socket.gethostname()",
+        # Dangerous: os module
+        "import os\nresult = os.listdir('.')",
+        # Dangerous: eval call
+        "result = eval('1+1')",
     ]
-    return {**state, "observations": observations}
+
+    results = [sandbox.run(snippet) for snippet in snippets]
+
+    state: SandboxState = {"results": results}
+    return "plain Python Sandbox (AST check + restricted exec)", state
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+def render_result(runtime: str, state: SandboxState) -> str:
+    lines = [
+        "Pattern: Sandbox Execution",
+        f"Runtime: {runtime}",
+        "Mechanic: AST pre-scan for forbidden names/imports, then exec() in restricted globals",
+        "",
+        f"SAFE_BUILTINS: {', '.join(sorted(SAFE_BUILTINS.keys()))}",
+        f"FORBIDDEN_NAMES: {', '.join(sorted(FORBIDDEN_NAMES))}",
+        "",
+        "Execution results:",
+    ]
+    for result in state["results"]:
+        first_line = result["code"].splitlines()[0]
+        if result["allowed"]:
+            lines.append(f"  [ALLOWED] {first_line!r} -> {result['output']}")
+        else:
+            lines.append(f"  [BLOCKED] {first_line!r} -- {result['block_reason']}")
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
     @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langchain(user_prompt)
+    def traced_run(user_prompt: str) -> tuple[str, SandboxState]:
+        return run_plain_python(user_prompt)
 
     runtime, state = traced_run(prompt)
     return render_result(runtime, state)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["Sandbox", "SAFE_BUILTINS", "FORBIDDEN_NAMES", "run_plain_python", "render_result", "run"]

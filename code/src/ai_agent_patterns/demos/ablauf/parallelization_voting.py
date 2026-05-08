@@ -1,116 +1,137 @@
-"""Parallelization (Voting) demo.
+"""Parallelization (Voting): N Kandidaten mit verschiedenen Strategien erzeugen, Mehrheit gewinnt.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangGraph, LangChain.
-Pattern idea: Mehrere Läufe bearbeiten dieselbe Aufgabe und ein Aggregator wählt das beste Ergebnis."""
+Der Lernpunkt: Der `Counter` zählt normalisierte Antworten aller Kandidaten — die häufigste
+gewinnt. Varianz sinkt ohne Judge-Modell; wer die Mehrheit bildet, ist direkt im Counter lesbar.
+"""
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import TypedDict
 
-from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
-
-SLUG = 'parallelization-voting'
+from ai_agent_patterns.demos.common import trace_demo, typed_state
 
 
-class DemoState(TypedDict):
+class Candidate(TypedDict):
+    strategy: str
+    response: str
+    normalized: str
+
+
+class VotingState(TypedDict):
     prompt: str
-    plan: list[str]
-    observations: list[str]
+    candidates: list[Candidate]
+    vote_tally: dict[str, int]
+    winner: str
     answer: str
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+# ── Candidate generation (different strategies / styles) ─────────────────────
+
+def generate_concise(prompt: str) -> Candidate:
+    """Strategy A: answer in as few words as possible."""
+    core = prompt.split()[0] if prompt.split() else "unknown"
+    response = f"Answer: {core}."
+    return Candidate(strategy="concise", response=response, normalized=response.lower().strip("."))
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+def generate_detailed(prompt: str) -> Candidate:
+    """Strategy B: expand the prompt into a full sentence."""
+    response = f"The answer to '{prompt[:40]}' is: {prompt.split()[0] if prompt.split() else 'unknown'}."
+    normalized = response.split("is:")[1].strip(" .").lower() if "is:" in response else response.lower()
+    return Candidate(strategy="detailed", response=response, normalized=normalized)
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
-    )
+def generate_question_form(prompt: str) -> Candidate:
+    """Strategy C: reframe as a direct yes/no or keyword answer."""
+    core = prompt.split()[0].lower() if prompt.split() else "unknown"
+    # Deterministic: short prompts get 'yes', longer ones get the first word
+    response = "yes" if len(prompt) < 20 else core
+    return Candidate(strategy="question_form", response=response, normalized=response.lower())
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+# ── Voting ────────────────────────────────────────────────────────────────────
+
+def majority_vote(candidates: list[Candidate]) -> tuple[dict[str, int], str]:
+    """Count normalized responses; return tally and the plurality winner."""
+    tally: Counter[str] = Counter(c["normalized"] for c in candidates)
+    winner = tally.most_common(1)[0][0]
+    return dict(tally), winner
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+# ── Graph nodes ───────────────────────────────────────────────────────────────
+
+def generate_candidates_node(state: VotingState) -> VotingState:
+    prompt = state["prompt"]
+    candidates = [
+        generate_concise(prompt),
+        generate_detailed(prompt),
+        generate_question_form(prompt),
     ]
-    return {**state, "observations": observations}
+    return {**state, "candidates": candidates}
 
 
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
+def vote_node(state: VotingState) -> VotingState:
+    tally, winner = majority_vote(state["candidates"])
+    # Find the first candidate whose normalized form matches the winner
+    winning_candidate = next(
+        (c for c in state["candidates"] if c["normalized"] == winner),
+        state["candidates"][0],
+    )
+    answer = (
+        f"Winner (plurality): {winner!r} "
+        f"via strategy={winning_candidate['strategy']!r}, "
+        f"response={winning_candidate['response']!r}"
+    )
+    return {**state, "vote_tally": tally, "winner": winner, "answer": answer}
 
 
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
+# ── Runtime ───────────────────────────────────────────────────────────────────
 
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
+def run_with_langgraph(prompt: str) -> tuple[str, VotingState]:
     try:
         from langgraph.constants import END, START
         from langgraph.graph import StateGraph
     except ImportError:
-        return run_with_langchain(prompt)
+        state: VotingState = {
+            "prompt": prompt, "candidates": [], "vote_tally": {}, "winner": "", "answer": "",
+        }
+        state = vote_node(generate_candidates_node(state))
+        return "plain Python fallback because langgraph is not installed", state
 
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
+    graph = StateGraph(VotingState)
+    graph.add_node("generate_candidates", generate_candidates_node)
+    graph.add_node("vote", vote_node)
+    graph.add_edge(START, "generate_candidates")
+    graph.add_edge("generate_candidates", "vote")
+    graph.add_edge("vote", END)
+
     app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
+    result: VotingState = typed_state(app.invoke(
+        {"prompt": prompt, "candidates": [], "vote_tally": {}, "winner": "", "answer": ""}
+    ))
     return "LangGraph StateGraph", result
 
 
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+def render_result(runtime: str, state: VotingState) -> str:
+    lines = [
+        "Pattern: Parallelization (Voting)",
+        f"Runtime: {runtime} with optional LangSmith tracing",
+        f"Input: {state['prompt'][:80]}",
+        f"── {len(state['candidates'])} candidates generated in parallel ──",
+    ]
+    for c in state["candidates"]:
+        lines.append(
+            f"  [{c['strategy']}] {c['response']!r}  →  normalized={c['normalized']!r}"
+        )
+    lines.append(f"── vote tally: {state['vote_tally']} ──")
+    lines.append(f"Winner: {state['answer']}")
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
-    @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
+    @trace_demo("demo.parallelization-voting")
+    def traced_run(user_prompt: str) -> tuple[str, VotingState]:
         return run_with_langgraph(user_prompt)
 
     runtime, state = traced_run(prompt)
@@ -118,10 +139,11 @@ def run(prompt: str) -> str:
 
 
 __all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
+    "generate_concise",
+    "generate_detailed",
+    "generate_question_form",
+    "majority_vote",
     "run_with_langgraph",
+    "render_result",
     "run",
 ]

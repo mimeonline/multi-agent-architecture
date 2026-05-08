@@ -1,127 +1,133 @@
-"""Checkpointing / Resumability demo.
+"""Checkpointing / Resumability: Nach jedem Schritt wird der vollständige Zustand persistiert.
 
-This file intentionally contains code, not pattern metadata.
-The metadata lives in demos/metadata.py because the theory is documented in docs, slides, and the webapp.
-
-What happens here:
-1. This file defines its own demo state, plan step, execution step, and synthesis step.
-2. run_with_langchain wires those steps as a local RunnableSequence when LangChain is installed.
-3. run_with_langgraph wires those steps as a local StateGraph when LangGraph is installed.
-4. run wraps the local implementation with optional LangSmith tracing.
-
-Framework focus: LangGraph checkpointers, Deep Agents.
-Pattern idea: Ausführungszustand wird gespeichert und später fortgesetzt."""
+Der Lernpunkt: Der Store ist per `thread_id` adressiert — dieselbe ID hydratisiert denselben
+Lauf, auch nach Tagen Pause. `completed_steps` als Set verhindert Doppelausführung beim Resume.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
 from ai_agent_patterns.demos.common import trace_demo
-from ai_agent_patterns.demos.metadata import get_pattern
 
-SLUG = 'checkpointing-resumability'
-
-
-class DemoState(TypedDict):
-    prompt: str
-    plan: list[str]
-    observations: list[str]
-    answer: str
+SLUG = "checkpointing-resumability"
 
 
-def build_plan(prompt: str) -> list[str]:
-    metadata = get_pattern(SLUG)
-    return [f"{step} for: {prompt}" for step in metadata.steps]
+class StepResult(TypedDict):
+    step: str
+    output: str
 
 
-def execute_step(step: str, index: int, prompt: str) -> str:
-    action = step.split(" for: ", 1)[0]
-    return f"{index}. {action} -> executable step for `{prompt[:90]}`"
+class CheckpointState(TypedDict):
+    thread_id: str
+    completed_steps: list[StepResult]
+    next_step_index: int
+    phase: str  # "initial" | "resumed"
 
 
-def synthesize(prompt: str, observations: list[str]) -> str:
-    metadata = get_pattern(SLUG)
-    return (
-        f"{metadata.name} executed {len(observations)} steps for `{prompt[:90]}`. "
-        f"The demo used the pattern move: {metadata.idea}"
-    )
+# In-memory checkpoint store (simulates durable storage)
+_CHECKPOINT_STORE: dict[str, CheckpointState] = {}
 
 
-def plan_node(prompt: str) -> DemoState:
-    return {"prompt": prompt, "plan": build_plan(prompt), "observations": [], "answer": ""}
+def save_checkpoint(thread_id: str, state: CheckpointState) -> None:
+    import copy
+    _CHECKPOINT_STORE[thread_id] = copy.deepcopy(state)
 
 
-def execute_node(state: DemoState) -> DemoState:
-    observations = [
-        execute_step(step, index, state["prompt"])
-        for index, step in enumerate(state["plan"], start=1)
+def load_checkpoint(thread_id: str) -> CheckpointState | None:
+    return _CHECKPOINT_STORE.get(thread_id)
+
+
+# --- Step implementations ---
+
+def step_fetch(prompt: str) -> str:
+    return f"fetched data for: {prompt[:40]}"
+
+
+def step_process(prompt: str) -> str:
+    return f"processed: {prompt[:40]}"
+
+
+def step_finalize(prompt: str) -> str:
+    return f"finalized and stored result for: {prompt[:40]}"
+
+
+_STEPS = [
+    ("step_fetch", step_fetch),
+    ("step_process", step_process),
+    ("step_finalize", step_finalize),
+]
+
+
+def run_from_checkpoint(thread_id: str, prompt: str, interrupt_before: int | None = None) -> CheckpointState:
+    existing = load_checkpoint(thread_id)
+    if existing:
+        state = existing
+        state["phase"] = "resumed"
+    else:
+        state = CheckpointState(
+            thread_id=thread_id,
+            completed_steps=[],
+            next_step_index=0,
+            phase="initial",
+        )
+
+    for i, (name, fn) in enumerate(_STEPS):
+        if i < state["next_step_index"]:
+            continue  # already done — skip
+        if interrupt_before is not None and i == interrupt_before:
+            # Simulate crash: save what we have and stop
+            save_checkpoint(thread_id, state)
+            break
+        output = fn(prompt)
+        state["completed_steps"].append({"step": name, "output": output})
+        state["next_step_index"] = i + 1
+        save_checkpoint(thread_id, state)
+
+    return state
+
+
+def run_plain_python(prompt: str) -> tuple[str, dict[str, CheckpointState]]:
+    thread_id = "thread-demo-42"
+    _CHECKPOINT_STORE.clear()  # fresh store for each demo run
+
+    # Phase 1: run steps 0 and 1, then interrupt before step 2
+    phase1 = run_from_checkpoint(thread_id, prompt, interrupt_before=2)
+
+    # Phase 2: resume with same thread_id — picks up from step 2
+    phase2 = run_from_checkpoint(thread_id, prompt, interrupt_before=None)
+
+    return "plain Python checkpoint store (dict)", {"phase1": phase1, "phase2": phase2}
+
+
+def render_result(runtime: str, states: dict[str, CheckpointState]) -> str:  # type: ignore[override]
+    p1 = states["phase1"]
+    p2 = states["phase2"]
+    lines = [
+        "Pattern: Checkpointing / Resumability",
+        f"Runtime: {runtime}",
+        "Mechanic: state saved after each step; same thread_id resumes from last checkpoint",
+        "",
+        f"Thread ID: {p1['thread_id']}",
+        "",
+        "Phase 1 (interrupted before step_finalize):",
+        *[f"  [done] {s['step']} -> {s['output']}" for s in p1["completed_steps"]],
+        f"  [interrupted] next_step_index={p1['next_step_index']} saved to checkpoint store",
+        "",
+        "Phase 2 (resumed from checkpoint):",
+        f"  Resumed at step index {p1['next_step_index']}",
+        *[f"  [done] {s['step']} -> {s['output']}" for s in p2["completed_steps"]],
     ]
-    return {**state, "observations": observations}
-
-
-def synthesize_node(state: DemoState) -> DemoState:
-    return {**state, "answer": synthesize(state["prompt"], state["observations"])}
-
-
-def run_with_langchain(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langchain_core.runnables import RunnableLambda
-    except ImportError:
-        state = synthesize_node(execute_node(plan_node(prompt)))
-        return "plain Python fallback because langchain_core is not installed", state
-
-    chain = RunnableLambda(plan_node) | RunnableLambda(execute_node) | RunnableLambda(synthesize_node)
-    return "LangChain RunnableSequence", chain.invoke(prompt)
-
-
-def run_with_langgraph(prompt: str) -> tuple[str, DemoState]:
-    try:
-        from langgraph.constants import END, START
-        from langgraph.graph import StateGraph
-    except ImportError:
-        return run_with_langchain(prompt)
-
-    graph = StateGraph(DemoState)
-    graph.add_node("plan", lambda state: plan_node(state["prompt"]))
-    graph.add_node("execute", execute_node)
-    graph.add_node("synthesize", synthesize_node)
-    graph.add_edge(START, "plan")
-    graph.add_edge("plan", "execute")
-    graph.add_edge("execute", "synthesize")
-    graph.add_edge("synthesize", END)
-    app = graph.compile()
-    result = app.invoke({"prompt": prompt, "plan": [], "observations": [], "answer": ""})
-    return "LangGraph StateGraph", result
-
-
-def render_result(runtime: str, state: DemoState) -> str:
-    metadata = get_pattern(SLUG)
-    return "\n".join(
-        [
-            f"Pattern: {metadata.name}",
-            f"Framework runtime: {runtime} with optional LangSmith tracing",
-            f"Input: {state['prompt']}",
-            "Executable trace:",
-            *state["observations"],
-            f"Result: {state['answer']}",
-        ]
-    )
+    return "\n".join(lines)
 
 
 def run(prompt: str) -> str:
     @trace_demo(f"demo.{SLUG}")
-    def traced_run(user_prompt: str) -> tuple[str, DemoState]:
-        return run_with_langgraph(user_prompt)
+    def traced_run(user_prompt: str) -> tuple[str, dict[str, CheckpointState]]:
+        return run_plain_python(user_prompt)
 
-    runtime, state = traced_run(prompt)
-    return render_result(runtime, state)
+    runtime, states = traced_run(prompt)
+    return render_result(runtime, states)
 
 
-__all__ = [
-    "build_plan",
-    "execute_step",
-    "synthesize",
-    "run_with_langchain",
-    "run_with_langgraph",
-    "run",
-]
+__all__ = ["save_checkpoint", "load_checkpoint", "run_from_checkpoint", "run_plain_python", "render_result", "run"]

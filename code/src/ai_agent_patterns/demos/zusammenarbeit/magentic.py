@@ -1,13 +1,16 @@
-"""Magentic-style demo with Deep Agents.
+"""Magentic: Lead-Agent plant mit Task-Ledger, delegiert dynamisch an Spezialisten und replant bei Hindernissen.
 
-The code creates a coordinator with tools and subagents when deepagents is installed.
-The fallback explains the same planning, tool use, delegation, and memory mapping.
+Der Lernpunkt: Ein `task_ledger` hält offene und erledigte Subtasks. Der Coordinator wählt
+pro Schritt den passenden Spezialisten, registriert Ergebnisse und replant, statt bei einem
+Hindernis abzubrechen.
 """
 
 from __future__ import annotations
 
+from typing import Any, cast
+
 from ai_agent_patterns.config import pick_model_config
-from ai_agent_patterns.llm import init_langchain_model, is_offline_model, last_message_text
+from ai_agent_patterns.llm import init_langchain_model, is_offline_model, last_message_text, provider_error
 from ai_agent_patterns.tools import calculator, tiny_search
 
 
@@ -37,7 +40,7 @@ def _fallback_report(mode: str, reason: str, prompt: str) -> str:
     snippets = tiny_search(prompt)
     return "\n".join(
         [
-            "Pattern: Deep Agents",
+            "Pattern: Magentic",
             f"Mode: {mode}",
             f"Reason: {reason}",
             "Deep Agents mapping:",
@@ -72,17 +75,21 @@ def run(prompt: str) -> str:
     if is_offline_model(model):
         return _fallback_report("offline fallback", f"{config.provider}: {config.reason}", prompt)
 
-    agent = create_deep_agent(
-        model=model,
-        tools=[tiny_search, calculator],
-        system_prompt=(
-            "You are the main Deep Agent for the AI Agent Pattern Landscape. "
-            "Plan before acting, use tools for factual lookup or calculation, delegate focused "
-            "research and synthesis to subagents when useful, and end with a concise pattern "
-            "recommendation."
-        ),
-        subagents=subagents,
-        name="pattern-landscape-deep-agent",
-    )
-    result = agent.invoke({"messages": [{"role": "user", "content": prompt}]})
-    return "Pattern: Deep Agents\n" + last_message_text(result)
+    try:
+        agent = create_deep_agent(
+            model=cast(Any, model),
+            tools=[tiny_search, calculator],
+            system_prompt=(
+                "You are the main Deep Agent for the AI Agent Pattern Landscape. "
+                "Plan before acting, use tools for factual lookup or calculation, delegate focused "
+                "research and synthesis to subagents when useful, and end with a concise pattern "
+                "recommendation."
+            ),
+            subagents=cast(Any, subagents),
+            name="pattern-landscape-deep-agent",
+        )
+        result = agent.invoke({"messages": [{"role": "user", "content": prompt}]})
+    except Exception as exc:
+        return _fallback_report("provider fallback", provider_error(config, exc), prompt)
+
+    return "Pattern: Magentic\n" + last_message_text(result)
