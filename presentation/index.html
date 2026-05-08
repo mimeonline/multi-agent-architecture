@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AI Agent Pattern Landscape</title>
+    <meta
+      name="description"
+      content="Reveal.js Präsentation zur AI Agent Pattern Landscape: Domänen, Frameworks, Heuristik und Praxis-Demo."
+    />
+    <link rel="preconnect" href="https://rsms.me/" />
+    <link rel="stylesheet" href="https://rsms.me/inter/inter.css" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='32' fill='%23071014'/%3E%3Ctext x='32' y='39' text-anchor='middle' font-family='Arial' font-size='20' font-weight='700' fill='%235eead4'%3EAI%3C/text%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div class="reveal">
+      <div class="slides">
+        <section class="hero" data-auto-animate>
+          <p class="eyebrow">Architektur-Referenzmodell</p>
+          <h1>AI Agent Pattern Landscape</h1>
+          <p class="subtitle">
+            Ein pragmatisches Navigationsmodell für Agentenarchitekturen:
+            Denken, Ablauf, Zusammenarbeit und Systembetrieb.
+          </p>
+          <div class="hero-grid">
+            <span>Denken</span>
+            <span>Ablauf</span>
+            <span>Zusammenarbeit</span>
+            <span>Systembetrieb</span>
+          </div>
+        </section>
+
+        <section>
+          <h2>Warum diese Landscape?</h2>
+          <div class="two-column">
+            <div>
+              <p>
+                Agentenprojekte scheitern selten an einem einzelnen Prompt.
+                Schwieriger ist die Auswahl des passenden Kontrollmodells,
+                der passenden Laufzeitfähigkeiten und der passenden
+                Verantwortungsgrenzen.
+              </p>
+              <p>
+                Die Landscape trennt wiederkehrende Patterns nach
+                Architekturwirkung statt nach Framework-Marketing.
+              </p>
+            </div>
+            <div class="signal-list">
+              <p><strong>Lesart:</strong> linear für Orientierung</p>
+              <p><strong>Lookup:</strong> punktuell für Entscheidungen</p>
+              <p><strong>Ziel:</strong> gemeinsame Sprache im Team</p>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Das Modell auf einen Blick</h2>
+          <img
+            class="landscape-image"
+            src="./assets/ai-agen-pattern-landscape.png"
+            alt="AI Agent Pattern Landscape Infografik"
+          />
+        </section>
+
+        <section>
+          <h2>Vier Domänen</h2>
+          <div class="domain-grid">
+            <article>
+              <span>01</span>
+              <h3>Denken</h3>
+              <p>Wie ein einzelner Agent intern schlussfolgert.</p>
+            </article>
+            <article>
+              <span>02</span>
+              <h3>Ablauf</h3>
+              <p>Wie Schritte kontrolliert, verbunden und sequenziert werden.</p>
+            </article>
+            <article>
+              <span>03</span>
+              <h3>Zusammenarbeit</h3>
+              <p>Wie mehrere Agenten Verantwortung und Information teilen.</p>
+            </article>
+            <article>
+              <span>04</span>
+              <h3>Systembetrieb</h3>
+              <p>Was Agentensysteme produktionsfähig macht.</p>
+            </article>
+          </div>
+        </section>
+
+        <section>
+          <section>
+            <h2>Domäne 1: Denken</h2>
+            <p class="lead">
+              Cognitive und Reasoning Patterns strukturieren das interne
+              Verhalten eines einzelnen Agenten.
+            </p>
+            <div class="pattern-strip">
+              <span>ReAct</span>
+              <span>Plan-and-Execute</span>
+              <span>ReWOO</span>
+              <span>Reflexion</span>
+              <span>Tree of Thoughts</span>
+              <span>Self-Consistency</span>
+              <span>CodeAct</span>
+            </div>
+          </section>
+          <section>
+            <h3>Was die Denk-Patterns bedeuten</h3>
+            <div class="explain-grid">
+              <article>
+                <strong>ReAct</strong>
+                <span class="alias">Reason + Act</span>
+                <p>Wechsel aus Denken, Tool-Aufruf und Beobachtung. Gut, wenn der nächste Schritt erst durch Tool-Ergebnisse klar wird.</p>
+              </article>
+              <article>
+                <strong>Plan-and-Execute</strong>
+                <p>Erst planen, dann Schritte ausführen. Gut, wenn ein Ziel in überprüfbare Teilaufgaben zerfällt.</p>
+              </article>
+              <article>
+                <strong>ReWOO</strong>
+                <span class="alias">Reasoning without Observation</span>
+                <p>Tool-Aufrufe vorab planen und gesammelt auswerten. Gut, wenn Kosten reduziert und Schritte vorhersehbar sind.</p>
+              </article>
+              <article>
+                <strong>Reflexion</strong>
+                <p>Der Agent kritisiert eigene Zwischenergebnisse. Gut, wenn Qualität wichtiger ist als minimale Latenz.</p>
+              </article>
+              <article>
+                <strong>Tree of Thoughts</strong>
+                <span class="alias">ToT</span>
+                <p>Mehrere Denkpfade werden parallel erkundet und bewertet. Gut für schwierige Entscheidungen mit mehreren Lösungswegen.</p>
+              </article>
+              <article>
+                <strong>Self-Consistency</strong>
+                <p>Mehrere Antworten werden erzeugt und per Konsens verdichtet. Gut, wenn Robustheit wichtiger ist als Einzelkosten.</p>
+              </article>
+              <article>
+                <strong>CodeAct</strong>
+                <span class="alias">Code as Action</span>
+                <p>Code wird zum Denk- und Handlungsmittel. Gut für Berechnung, Transformation und reproduzierbare Zwischenschritte.</p>
+              </article>
+            </div>
+          </section>
+          <section>
+            <h3>Typische Entscheidung</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Situation</th>
+                  <th>Pattern</th>
+                  <th>Trade-off</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Unklarer Pfad mit Tools</td>
+                  <td>ReAct</td>
+                  <td>adaptiv, aber call-intensiv</td>
+                </tr>
+                <tr>
+                  <td>Ziel in Teilaufgaben zerlegbar</td>
+                  <td>Plan-and-Execute</td>
+                  <td>steuerbar, aber planungsabhängig</td>
+                </tr>
+                <tr>
+                  <td>Tool-Aufrufe vorab erkennbar</td>
+                  <td>ReWOO</td>
+                  <td>günstiger, aber weniger adaptiv</td>
+                </tr>
+              </tbody>
+            </table>
+          </section>
+        </section>
+
+        <section>
+          <section>
+            <h2>Domäne 2: Ablauf</h2>
+            <p class="lead">
+              Workflow und Control Flow Patterns verbinden LLM-Aufrufe,
+              Komponenten und Zwischenergebnisse zu nachvollziehbaren Abläufen.
+            </p>
+            <div class="pattern-strip wide">
+              <span>Sequential Pipeline</span>
+              <span>Routing</span>
+              <span>Parallelization</span>
+              <span>Loop</span>
+              <span>Evaluator-Optimizer</span>
+              <span>Iterative Refinement</span>
+              <span>Orchestrator-Workers</span>
+              <span>Map-Reduce</span>
+            </div>
+          </section>
+          <section>
+            <h3>Ablauf-Patterns, Teil 1</h3>
+            <div class="explain-grid">
+              <article>
+                <strong>Sequential Pipeline</strong>
+                <span class="alias">Prompt Chaining</span>
+                <p>Feste Reihenfolge aus mehreren Schritten. Gut für Extraktion, Analyse, Entwurf und Prüfung als klare Kette.</p>
+              </article>
+              <article>
+                <strong>Routing</strong>
+                <p>Eine Anfrage wird klassifiziert und zum passenden Pfad geleitet. Gut bei unterschiedlichen Anfragearten.</p>
+              </article>
+              <article>
+                <strong>Parallelization (Sectioning)</strong>
+                <p>Unabhängige Teile werden parallel bearbeitet. Gut bei langen Dokumenten, Listen oder separierbaren Teilproblemen.</p>
+              </article>
+              <article>
+                <strong>Parallelization (Voting)</strong>
+                <p>Mehrere Läufe bearbeiten dieselbe Aufgabe. Ein Aggregator wählt oder synthetisiert das Ergebnis.</p>
+              </article>
+            </div>
+          </section>
+          <section>
+            <h3>Ablauf-Patterns, Teil 2</h3>
+            <div class="explain-grid">
+              <article>
+                <strong>Loop</strong>
+                <p>Schritte werden wiederholt, bis Qualität, Budget oder Abbruchbedingung erreicht sind.</p>
+              </article>
+              <article>
+                <strong>Evaluator-Optimizer</strong>
+                <span class="alias">Generator-Critic</span>
+                <p>Generator erstellt, Evaluator bewertet, Generator verbessert. Gut bei klar formulierbaren Qualitätskriterien.</p>
+              </article>
+              <article>
+                <strong>Iterative Refinement</strong>
+                <p>Ein Ergebnis wird kontrolliert über mehrere Revisionen verbessert. Gut bei Texten, Plänen und Spezifikationen.</p>
+              </article>
+              <article>
+                <strong>Orchestrator-Workers</strong>
+                <p>Ein Orchestrator zerlegt Aufgaben dynamisch und verteilt sie an Worker. Gut bei unbekannter Teilstruktur.</p>
+              </article>
+              <article>
+                <strong>Map-Reduce</strong>
+                <p>Viele unabhängige Einheiten werden bearbeitet und aggregiert. Gut für große Eingaben und Batch-Verarbeitung.</p>
+              </article>
+            </div>
+          </section>
+          <section>
+            <h3>Kontrollfluss statt Magie</h3>
+            <div class="flow">
+              <div>Input</div>
+              <div>Route</div>
+              <div>Work</div>
+              <div>Evaluate</div>
+              <div>Output</div>
+            </div>
+            <p>
+              Ablauf-Patterns sind die erste Wahl, wenn der Prozess
+              vorhersagbar genug ist, um ihn explizit zu modellieren.
+            </p>
+          </section>
+        </section>
+
+        <section>
+          <section>
+            <h2>Domäne 3: Zusammenarbeit</h2>
+            <p class="lead">
+              Multi-Agent Coordination Patterns beschreiben, wie autonome
+              Agenten Kontrolle, Wissen und Verantwortung austauschen.
+            </p>
+            <div class="pattern-strip wide">
+              <span>Supervisor</span>
+              <span>Hierarchical Supervisor</span>
+              <span>Handoff</span>
+              <span>Swarm</span>
+              <span>Group Chat</span>
+              <span>Multi-Agent Debate</span>
+              <span>Magentic</span>
+              <span>Blackboard</span>
+              <span>Contract Net</span>
+              <span>Market-based</span>
+              <span>Agents-as-Tools</span>
+              <span>Graph-based Orchestration</span>
+            </div>
+          </section>
+          <section>
+            <h3>Zusammenarbeit, Teil 1</h3>
+            <div class="explain-grid">
+              <article>
+                <strong>Supervisor</strong>
+                <p>Ein zentraler Agent entscheidet, wer als Nächstes arbeitet. Gut für kontrollierte Delegation.</p>
+              </article>
+              <article>
+                <strong>Hierarchical Supervisor</strong>
+                <p>Supervisoren organisieren Subteams. Gut, wenn viele Agenten oder Domänen getrennt koordiniert werden.</p>
+              </article>
+              <article>
+                <strong>Handoff</strong>
+                <p>Kontrolle und Kontext wechseln zu einem Spezialisten. Gut bei klar getrennten Zuständigkeiten.</p>
+              </article>
+              <article>
+                <strong>Swarm</strong>
+                <p>Agenten koordinieren dezentral über lokale Regeln oder Nachrichten. Gut für Exploration, schwerer zu kontrollieren.</p>
+              </article>
+              <article>
+                <strong>Group Chat</strong>
+                <p>Mehrere Agenten sprechen in einem gemeinsamen Raum. Gut für Perspektiven, Debatte und offene Problemlösung.</p>
+              </article>
+              <article>
+                <strong>Multi-Agent Debate</strong>
+                <p>Agenten prüfen unterschiedliche Positionen. Gut, wenn Gegenargumente Fehlentscheidungen sichtbar machen.</p>
+              </article>
+            </div>
+          </section>
+          <section>
+            <h3>Zusammenarbeit, Teil 2</h3>
+            <div class="explain-grid">
+              <article>
+                <strong>Magentic</strong>
+                <span class="alias">Composite Orchestration</span>
+                <p>Composite orchestration mit Planung, Task Ledger, Replanning und Delegation. Gut für offene Langläufer.</p>
+              </article>
+              <article>
+                <strong>Blackboard</strong>
+                <p>Agenten koordinieren über gemeinsamen Zustand statt direkten Chat. Gut für asynchrone Beiträge.</p>
+              </article>
+              <article>
+                <strong>Contract Net</strong>
+                <p>Aufgaben werden ausgeschrieben und Agenten bieten darauf. Gut als Modell für dynamische Allokation.</p>
+              </article>
+              <article>
+                <strong>Market-based</strong>
+                <p>Koordination über Preise, Budgets oder Nutzen. Gut bei knappen Ressourcen und Priorisierung.</p>
+              </article>
+              <article>
+                <strong>Agents-as-Tools</strong>
+                <p>Spezialisten werden wie Tools mit klarer Schnittstelle aufgerufen. Gut für Kapselung und Rechtebegrenzung.</p>
+              </article>
+              <article>
+                <strong>Graph-based Orchestration</strong>
+                <p>Agenten, Tools und Übergänge werden als expliziter State Graph modelliert. Gut für Testbarkeit und Kontrolle.</p>
+              </article>
+            </div>
+          </section>
+          <section>
+            <h3>Koordination nach Verantwortungsgrenze</h3>
+            <div class="coordination-map">
+              <article>
+                <h4>Supervisor</h4>
+                <p>Zentrale Steuerung, klare Delegation, gut beobachtbar.</p>
+              </article>
+              <article>
+                <h4>Handoff</h4>
+                <p>Kontrolle wandert zwischen Spezialisten mit eigenem Kontext.</p>
+              </article>
+              <article>
+                <h4>Group Chat</h4>
+                <p>Offene Kooperation, nützlich bei unscharfer Lösungssuche.</p>
+              </article>
+            </div>
+          </section>
+        </section>
+
+        <section>
+          <section>
+            <h2>Domäne 4: Systembetrieb</h2>
+            <p class="lead">
+              Produktionsreife entsteht durch Runtime, Memory, Tool Integration,
+              Governance und Observability.
+            </p>
+          </section>
+          <section>
+            <h3>Systembetrieb-Patterns, Teil 1</h3>
+            <div class="explain-grid">
+              <article>
+                <strong>Conversational Memory</strong>
+                <p>Hält Gesprächshistorie über Turns verfügbar. Gut für Nutzerkontext und Bezugnahmen.</p>
+              </article>
+              <article>
+                <strong>Episodic Memory</strong>
+                <p>Speichert abgeschlossene Aufgaben als Episoden. Gut für wiederkehrende Fälle und Erfahrungswissen.</p>
+              </article>
+              <article>
+                <strong>Semantic Memory</strong>
+                <p>Speichert dauerhaftes Wissen unabhängig vom Gespräch. Gut für Fakten, Präferenzen und Domänenwissen.</p>
+              </article>
+              <article>
+                <strong>Working Memory / Scratchpad</strong>
+                <p>Hält temporären Arbeitszustand während eines Laufs. Gut für Zwischenschritte und Tool-Ergebnisse.</p>
+              </article>
+              <article>
+                <strong>Vector Memory</strong>
+                <span class="alias">RAG Memory</span>
+                <p>Ruft Inhalte über semantische Ähnlichkeit ab. Gut für RAG und große Wissensmengen.</p>
+              </article>
+              <article>
+                <strong>Graph Memory</strong>
+                <p>Speichert Entitäten und Beziehungen. Gut, wenn Herkunft, Pfade und Zusammenhänge wichtig sind.</p>
+              </article>
+              <article>
+                <strong>Compressed Context Memory</strong>
+                <p>Verdichtet lange Verläufe. Gut, wenn Kontextfenster und Tokenbudget begrenzt sind.</p>
+              </article>
+            </div>
+          </section>
+          <section>
+            <h3>Systembetrieb-Patterns, Teil 2</h3>
+            <div class="explain-grid">
+              <article>
+                <strong>Function Calling</strong>
+                <p>Strukturierter Aufruf definierter Funktionen. Gut für validierbare Tool-Argumente.</p>
+              </article>
+              <article>
+                <strong>Tool Registry</strong>
+                <p>Zentraler Katalog für Tools, Schemas und Berechtigungen. Gut bei vielen Fähigkeiten.</p>
+              </article>
+              <article>
+                <strong>MCP (Model Context Protocol)</strong>
+                <span class="alias">MCP = Model Context Protocol</span>
+                <p>Standardisierte Tool- und Kontextanbindung über MCP. Gut für interoperable Integrationen.</p>
+              </article>
+              <article>
+                <strong>Adapter Pattern</strong>
+                <p>Übersetzt externe APIs in agentengerechte Schnittstellen. Gut für stabile Tool-Verträge.</p>
+              </article>
+              <article>
+                <strong>Capability Routing</strong>
+                <p>Leitet Anfragen anhand benötigter Fähigkeiten weiter. Gut bei vielen Tools oder Spezialisten.</p>
+              </article>
+              <article>
+                <strong>Permission-scoped Tools</strong>
+                <p>Begrenzt Tools pro Agent, Aufgabe oder Lauf. Gut für Sicherheit und Compliance.</p>
+              </article>
+            </div>
+          </section>
+          <section>
+            <h3>Systembetrieb-Patterns, Teil 3</h3>
+            <div class="explain-grid">
+              <article>
+                <strong>Actor Model</strong>
+                <p>Kapselt Zustand in unabhängigen Actors. Gut für Nebenläufigkeit und Isolation.</p>
+              </article>
+              <article>
+                <strong>Event-driven Choreography</strong>
+                <p>Komponenten reagieren auf Ereignisse. Gut für lose gekoppelte Agentensysteme.</p>
+              </article>
+              <article>
+                <strong>Saga / Compensation</strong>
+                <p>Sichert mehrstufige Aktionen durch Ausgleichsschritte ab. Gut bei externen Nebenwirkungen.</p>
+              </article>
+              <article>
+                <strong>Workflow DAG / Durable Execution</strong>
+                <span class="alias">DAG = Directed Acyclic Graph</span>
+                <p>Persistente Ausführungsgraphen mit Retry und Resume. Gut für Produktion und Langläufer.</p>
+              </article>
+              <article>
+                <strong>Checkpointing / Resumability</strong>
+                <p>Speichert Laufzustand für Wiederaufnahme. Gut bei teuren oder unterbrechbaren Läufen.</p>
+              </article>
+              <article>
+                <strong>Pub/Sub Agent Mesh</strong>
+                <span class="alias">Publish / Subscribe</span>
+                <p>Verbindet Agenten über Topics und Events. Gut für skalierbare Entkopplung.</p>
+              </article>
+            </div>
+          </section>
+          <section>
+            <h3>Systembetrieb-Patterns, Teil 4</h3>
+            <div class="explain-grid">
+              <article>
+                <strong>Human-in-the-Loop Approval Gate</strong>
+                <span class="alias">HITL = Human in the Loop</span>
+                <p>Menschen geben kritische Schritte frei. Gut bei Risiko, Kosten oder Compliance.</p>
+              </article>
+              <article>
+                <strong>Output Validation / Schema Enforcement</strong>
+                <p>Validiert Antworten gegen Schema und Regeln. Gut für Downstream-Systeme.</p>
+              </article>
+              <article>
+                <strong>Sandbox Execution</strong>
+                <p>Führt Code isoliert aus. Gut für CodeAct, Shell und untrusted Inputs.</p>
+              </article>
+              <article>
+                <strong>Least Privilege Agent</strong>
+                <p>Gibt Agenten nur notwendige Rechte. Gut für getrennte Vertrauenszonen.</p>
+              </article>
+              <article>
+                <strong>Audit Trail</strong>
+                <p>Protokolliert Entscheidungen, Tools und Freigaben. Gut für Nachvollziehbarkeit.</p>
+              </article>
+              <article>
+                <strong>Multimodal Guardrails</strong>
+                <p>Prüft Text, Bild, Audio oder Video. Gut bei multimodalen Sicherheitsrisiken.</p>
+              </article>
+            </div>
+          </section>
+          <section>
+            <h3>Systembetrieb-Patterns, Teil 5</h3>
+            <div class="explain-grid">
+              <article>
+                <strong>Distributed Tracing</strong>
+                <p>Macht Agentenläufe und Tool-Aufrufe als Trace sichtbar. Gut für Debugging und Latenz.</p>
+              </article>
+              <article>
+                <strong>Token / Cost Tracking</strong>
+                <p>Misst Verbrauch und Kosten pro Lauf oder Agent. Gut für Budgets und Optimierung.</p>
+              </article>
+              <article>
+                <strong>LLM-as-Judge</strong>
+                <span class="alias">LLM = Large Language Model</span>
+                <p>Bewertet Ausgaben mit einem Modell. Gut für skalierte Qualitätsprüfung.</p>
+              </article>
+              <article>
+                <strong>Integration Tests für Agents</strong>
+                <p>Testet Agenten über Tools, Speicher und Kontrollflüsse hinweg. Gut gegen Regressionen.</p>
+              </article>
+            </div>
+          </section>
+        </section>
+
+        <section>
+          <h2>Framework-Mapping</h2>
+          <table class="mapping-table">
+            <thead>
+              <tr>
+                <th>Framework</th>
+                <th>Native Patterns</th>
+                <th>Stärke</th>
+                <th>Schwäche</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Anthropic Cookbook</td>
+                <td>5 Workflow-Patterns als Minimal-Code</td>
+                <td>Minimal, gut erklärbar</td>
+                <td>Kein Runtime-Framework</td>
+              </tr>
+              <tr>
+                <td>LangGraph</td>
+                <td>Supervisor, Swarm, Graph-based</td>
+                <td>Explizite Graph-Orchestrierung</td>
+                <td>Graph-Design braucht Disziplin</td>
+              </tr>
+              <tr>
+                <td>CrewAI</td>
+                <td>Sequential, Hierarchical Process, Flows</td>
+                <td>Rollen- und Prozessmodell</td>
+                <td>Abstraktion kann verdecken</td>
+              </tr>
+              <tr>
+                <td>AutoGen / AG2</td>
+                <td>GroupChat, Two-Agent-Chat, Nested Chats</td>
+                <td>Konversationelle Koordination</td>
+                <td>Kontrolle braucht Leitplanken</td>
+              </tr>
+              <tr>
+                <td>Microsoft Agent Framework</td>
+                <td>Sequential, Concurrent, Group Chat, Handoff, Magentic</td>
+                <td>Breite Orchestrierung</td>
+                <td>Ökosystembindung</td>
+              </tr>
+              <tr>
+                <td>Google ADK</td>
+                <td>Sequential Pipeline, Coordinator, Parallel, Hierarchical, Generator-Critic, Iterative, HITL, Composite</td>
+                <td>Pattern-Katalog als Baukasten</td>
+                <td>Cloud-nahe Denkweise</td>
+              </tr>
+              <tr>
+                <td>AWS Strands</td>
+                <td>Graph, Swarm, Workflow, Agents-as-Tools</td>
+                <td>Agent Mesh und AWS-Integration</td>
+                <td>Plattformannahmen</td>
+              </tr>
+              <tr>
+                <td>OpenAI Agents SDK</td>
+                <td>Handoff</td>
+                <td>Direkter Modell- und Tool-Stack</td>
+                <td>Komplexe Graphen selbst modellieren</td>
+              </tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section>
+          <h2>Decision-Heuristik</h2>
+          <div class="decision-tree">
+            <div>
+              <strong>1</strong>
+              <span>Reicht ein einzelner Prompt?</span>
+              <em>Ja: direkter Modell-Call</em>
+            </div>
+            <div>
+              <strong>2</strong>
+              <span>Braucht es externe Interaktion?</span>
+              <em>Nein: Reasoning Pattern prüfen</em>
+            </div>
+            <div>
+              <strong>3</strong>
+              <span>Ist der Ablauf vorhersagbar?</span>
+              <em>Ja: Workflow-Pattern</em>
+            </div>
+            <div>
+              <strong>4</strong>
+              <span>Reicht ein autonomer Agent?</span>
+              <em>Ja: ReAct oder Plan-and-Execute</em>
+            </div>
+            <div>
+              <strong>5</strong>
+              <span>Sind echte Spezialisten nötig?</span>
+              <em>Ja: Kooperationstyp prüfen</em>
+            </div>
+            <div>
+              <strong>6</strong>
+              <span>Autonome Kooperation?</span>
+              <em>Ja: Magentic, Group Chat, Blackboard</em>
+            </div>
+            <div>
+              <strong>7</strong>
+              <span>Production-Kontext?</span>
+              <em>Ja: Systembetrieb verpflichtend</em>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h2>Praxis-Demo: Architektur-Review-Agent</h2>
+          <div class="demo-grid">
+            <article>
+              <h3>Setup</h3>
+              <p>Repo-Kontext, Pattern-Lookup, Policy-Regeln und Zielartefakt.</p>
+            </article>
+            <article>
+              <h3>Agentik</h3>
+              <p>Planner für Review-Plan, ReAct für Tool-Use, Evaluator für Qualität.</p>
+            </article>
+            <article>
+              <h3>Betrieb</h3>
+              <p>Tracing, Kostenlimit, Checkpoints, Audit Trail und HITL-Freigabe.</p>
+            </article>
+          </div>
+        </section>
+
+        <section>
+          <h2>Takeaways</h2>
+          <div class="takeaways">
+            <p>Erst Domäne klären, dann Pattern wählen.</p>
+            <p>Frameworks implementieren Ausschnitte, keine Strategie.</p>
+            <p>Production beginnt bei Runtime, Governance und Observability.</p>
+            <p>Gute Agentenarchitektur ist explizit, messbar und wartbar.</p>
+          </div>
+        </section>
+
+        <section class="closing">
+          <p class="eyebrow">AI Agent Pattern Landscape</p>
+          <h2>Von Pattern-Namen zu Architekturentscheidungen.</h2>
+          <p>
+            Die Landscape ist kein Reifegradmodell. Sie ist eine Karte für
+            konkrete Entscheidungen im Agentenbau.
+          </p>
+        </section>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

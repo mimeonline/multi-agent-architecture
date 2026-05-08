@@ -1,0 +1,38 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "ai-agent-patterns-demo"
+version = "0.1.0"
+description = "Practical Python demos for AI agent patterns with LangChain, LangGraph, LangSmith, and Deep Agents."
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [{ name = "Multi-Agent Architecture Demo Workers" }]
+dependencies = [
+  "python-dotenv>=1.0.1",
+  "langchain>=1.0.0",
+  "langchain-openai>=1.0.0",
+  "langchain-anthropic>=1.0.0",
+  "langchain-openrouter>=0.3.0",
+  "langchain-ollama>=1.0.0",
+  "langgraph>=1.0.0",
+  "langsmith>=0.4.0",
+  "deepagents>=0.0.1",
+]
+
+[project.optional-dependencies]
+dev = ["ruff>=0.8.0", "mypy>=1.13.0"]
+
+[project.scripts]
+agent-patterns = "ai_agent_patterns.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ai_agent_patterns"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
