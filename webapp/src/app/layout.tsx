@@ -12,7 +12,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <header className="site-header">
           <a className="brand" href="#top" aria-label="AI Agent Pattern Landscape Start">
-            <span className="brand-mark">AI</span>
+            <span className="brand-mark">A</span>
             <span>Agent Pattern Landscape</span>
           </a>
           <nav className="top-nav" aria-label="Hauptnavigation">
@@ -23,8 +23,19 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           </nav>
         </header>
         {children}
+        <footer className="site-footer">
+          <div className="footer-row">
+            <span>AI Agent Pattern Landscape · Lernreferenz</span>
+            <span>
+              Quellen: <a href="/docs/ai-agent-pattern-landscape.md">docs</a>
+              <span> · </span>
+              <a href="/code/README.md">code</a>
+              <span> · </span>
+              <a href="/presentation/index.html">presentation</a>
+            </span>
+          </div>
+        </footer>
       </body>
     </html>
   );
 }
-

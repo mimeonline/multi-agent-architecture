@@ -29,19 +29,28 @@ export function DecisionGuide() {
           ))}
         </ol>
         <div className="decision-detail">
-          <p className="decision-count">Frage {activeIndex + 1} von {decisionSteps.length}</p>
+          <p className="decision-count">
+            Frage {activeIndex + 1} von {decisionSteps.length}
+          </p>
           <h3>{step.question}</h3>
           <div className="answer-grid">
-            <div><strong>Ja</strong><p>{step.yes}</p></div>
-            <div><strong>Nein</strong><p>{step.no}</p></div>
+            <div className="answer-card yes">
+              <p className="answer-label">Ja</p>
+              <p>{step.yes}</p>
+            </div>
+            <div className="answer-card no">
+              <p className="answer-label">Nein</p>
+              <p>{step.no}</p>
+            </div>
           </div>
           <p className="recommendation-label">Typische Kandidaten</p>
           <div className="recommendations">
-            {step.recommendation.map((item) => <span key={item}>{item}</span>)}
+            {step.recommendation.map((item) => (
+              <span key={item}>{item}</span>
+            ))}
           </div>
         </div>
       </div>
     </section>
   );
 }
-

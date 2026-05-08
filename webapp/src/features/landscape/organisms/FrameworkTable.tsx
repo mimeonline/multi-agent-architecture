@@ -3,25 +3,25 @@ import { frameworkRows } from "../lib/patterns";
 export function FrameworkTable() {
   return (
     <section className="frameworks" aria-labelledby="frameworks-title">
-      <div>
-        <p className="section-kicker">Framework-Mapping</p>
-        <h2 id="frameworks-title">Frameworks nach natürlicher Stärke.</h2>
-      </div>
-      <div className="framework-table" role="table" aria-label="Framework-Mapping">
-        <div role="row">
-          <strong role="columnheader">Framework</strong>
-          <strong role="columnheader">Native Patterns</strong>
-          <strong role="columnheader">Stärke</strong>
+      <div className="frameworks-heading">
+        <div>
+          <p className="section-kicker">Framework-Mapping</p>
+          <h2 id="frameworks-title">Frameworks nach natürlicher Stärke.</h2>
         </div>
+        <p>
+          Welche Frameworks bringen welche Patterns nativ mit. Eine schnelle Orientierung
+          zur Auswahl der passenden Werkbank.
+        </p>
+      </div>
+      <div className="framework-grid" role="list" aria-label="Framework-Mapping">
         {frameworkRows.map(([framework, nativePatterns, strength]) => (
-          <div role="row" key={framework}>
-            <span>{framework}</span>
-            <span>{nativePatterns}</span>
-            <span>{strength}</span>
-          </div>
+          <article className="framework-card" role="listitem" key={framework}>
+            <span className="fw-name">{framework}</span>
+            <span className="fw-patterns">{nativePatterns}</span>
+            <span className="fw-strength">{strength}</span>
+          </article>
         ))}
       </div>
     </section>
   );
 }
-

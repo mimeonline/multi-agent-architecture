@@ -1,7 +1,6 @@
 import Image from "next/image";
-import { ArrowRight, BookOpen, Network } from "lucide-react";
+import { ArrowRight, BookOpen, Brain, Network, Server, Users, Workflow } from "lucide-react";
 import { SectionKicker } from "@/components/atoms/SectionKicker";
-import { Button } from "@/components/ui/button";
 import { DecisionGuide } from "../organisms/DecisionGuide";
 import { DomainSummary } from "../molecules/DomainSummary";
 import { FrameworkTable } from "../organisms/FrameworkTable";
@@ -13,34 +12,35 @@ export function LandscapeTemplate() {
       <section className="hero" aria-labelledby="hero-title">
         <div className="hero-copy">
           <SectionKicker>Architektur-Referenz · Lernoberfläche</SectionKicker>
-          <h1 id="hero-title">AI Agent Pattern Landscape</h1>
+          <h1 id="hero-title">
+            AI Agent Pattern <em>Landscape</em>
+          </h1>
           <p className="hero-lead">
             Eine navigierbare Referenz für Agent Intelligence, Orchestration und Production
-            Architecture: Pattern verstehen, einordnen und in Code übertragen.
+            Architecture. Pattern verstehen, einordnen und in Code übertragen.
           </p>
           <div className="hero-actions" aria-label="Schnellzugriff">
-            <Button asChild>
-              <a href="#lookup">
-                <BookOpen aria-hidden="true" />
-                Pattern suchen
-              </a>
-            </Button>
-            <Button asChild variant="secondary">
-              <a href="#decision">
-                Decision-Heuristik
-                <ArrowRight aria-hidden="true" />
-              </a>
-            </Button>
+            <a className="btn btn-primary" href="#lookup">
+              <BookOpen aria-hidden="true" />
+              Pattern suchen
+            </a>
+            <a className="btn btn-secondary" href="#decision">
+              Decision-Heuristik
+              <ArrowRight aria-hidden="true" />
+            </a>
           </div>
         </div>
         <div className="hero-visual" aria-hidden="true">
-          <div className="signal-line" />
-          <div className="orbit one">Reasoning</div>
-          <div className="orbit two">Workflow</div>
-          <div className="orbit three">Agents</div>
-          <div className="orbit four">Runtime</div>
+          <div className="constellation">
+            <div className="core">
+              <Network aria-hidden="true" style={{ width: 32, height: 32 }} />
+            </div>
+            <div className="node denken">Reasoning</div>
+            <div className="node ablauf">Workflow</div>
+            <div className="node zusammen">Multi-Agent</div>
+            <div className="node system">Runtime</div>
+          </div>
         </div>
-        <Network className="hero-network-icon" aria-hidden="true" />
       </section>
 
       <section className="section intro" aria-labelledby="model-title">
@@ -56,10 +56,34 @@ export function LandscapeTemplate() {
       </section>
 
       <section className="domain-band" aria-label="Domänenübersicht">
-        <DomainSummary index="01" title="Denken" description="Cognitive und Reasoning Patterns für einzelne Agents." />
-        <DomainSummary index="02" title="Ablauf" description="Workflow und Control Flow zwischen LLM-Aufrufen." />
-        <DomainSummary index="03" title="Zusammenarbeit" description="Koordination, Handoff und Kommunikation mehrerer Agents." />
-        <DomainSummary index="04" title="Systembetrieb" description="Memory, Tool Integration, Runtime, Governance und Evaluation." />
+        <DomainSummary
+          index="01"
+          domain="Denken"
+          title="Denken"
+          description="Cognitive und Reasoning Patterns für einzelne Agents."
+          icon={<Brain aria-hidden="true" />}
+        />
+        <DomainSummary
+          index="02"
+          domain="Ablauf"
+          title="Ablauf"
+          description="Workflow und Control Flow zwischen LLM-Aufrufen."
+          icon={<Workflow aria-hidden="true" />}
+        />
+        <DomainSummary
+          index="03"
+          domain="Zusammenarbeit"
+          title="Zusammenarbeit"
+          description="Koordination, Handoff und Kommunikation mehrerer Agents."
+          icon={<Users aria-hidden="true" />}
+        />
+        <DomainSummary
+          index="04"
+          domain="Systembetrieb"
+          title="Systembetrieb"
+          description="Memory, Tool Integration, Runtime, Governance und Evaluation."
+          icon={<Server aria-hidden="true" />}
+        />
       </section>
 
       <section id="landscape" className="section media-section" aria-labelledby="landscape-title">
@@ -69,13 +93,15 @@ export function LandscapeTemplate() {
           <p>Die Infografik verdichtet die Pattern-Domänen und macht Beziehungen schneller scanbar.</p>
         </div>
         <figure className="infographic">
-          <Image
-            src="/ai-agen-pattern-landscape.png"
-            alt="Infografik AI Agent Pattern Landscape mit Ebenen für Agent Intelligence, Orchestration und Production Architecture"
-            width={2800}
-            height={1600}
-            priority
-          />
+          <div className="infographic-frame">
+            <Image
+              src="/ai-agen-pattern-landscape.png"
+              alt="Infografik AI Agent Pattern Landscape mit Ebenen für Agent Intelligence, Orchestration und Production Architecture"
+              width={2800}
+              height={1600}
+              priority
+            />
+          </div>
           <figcaption>
             Quelle: <a href="/docs/ai-agent-pattern-landscape.md">docs/ai-agent-pattern-landscape.md</a>
             <span> · </span>

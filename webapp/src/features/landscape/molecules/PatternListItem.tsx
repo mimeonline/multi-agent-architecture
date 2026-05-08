@@ -10,10 +10,11 @@ export function PatternListItem({ pattern, selected, onSelect }: PatternListItem
   return (
     <button
       className={`pattern-row${selected ? " is-selected" : ""}`}
+      data-domain={pattern.domain}
       type="button"
       onClick={() => onSelect(pattern)}
     >
-      <span>
+      <span className="name">
         <strong>{pattern.name}</strong>
         <small>{pattern.subdomain ? `${pattern.domain} · ${pattern.subdomain}` : pattern.domain}</small>
       </span>
@@ -21,4 +22,3 @@ export function PatternListItem({ pattern, selected, onSelect }: PatternListItem
     </button>
   );
 }
-

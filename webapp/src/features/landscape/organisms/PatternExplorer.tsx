@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Search } from "lucide-react";
 import { domains, allPatterns } from "../lib/patterns";
 import type { Domain, Pattern } from "../types/pattern";
 import { PatternDetail } from "../molecules/PatternDetail";
@@ -48,8 +49,8 @@ export function PatternExplorer() {
           <p className="section-kicker">Pattern-Lookup</p>
           <h2 id="lookup-title">Finde passende Bausteine nach Problem, Domäne oder Framework.</h2>
         </div>
-        <label className="search-label">
-          <span>Suche</span>
+        <label className="search-shell" aria-label="Suche">
+          <Search aria-hidden="true" />
           <input
             type="search"
             placeholder="z. B. Tool, LangGraph, Kosten, Handoff"
@@ -63,11 +64,17 @@ export function PatternExplorer() {
         {domains.map((domain) => (
           <button
             className={`filter${filter === domain ? " is-active" : ""}`}
+            data-domain={domain}
             key={domain}
             type="button"
             onClick={() => setFilter(domain)}
           >
             {domain}
+            <span style={{ opacity: 0.6, fontWeight: 600 }}>
+              {domain === "Alle"
+                ? allPatterns.length
+                : allPatterns.filter((p) => p.domain === domain).length}
+            </span>
           </button>
         ))}
       </div>
@@ -92,4 +99,3 @@ export function PatternExplorer() {
     </section>
   );
 }
-
