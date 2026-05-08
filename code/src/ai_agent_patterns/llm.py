@@ -18,6 +18,23 @@ def init_langchain_model(config: ModelConfig | None = None):
     if not config.online or not config.model:
         return OfflineModel()
 
+    if config.provider == "github":
+        try:
+            from langchain_openai import ChatOpenAI
+        except ImportError as exc:
+            raise RuntimeError(
+                "langchain-openai is not installed. Run `pip install -r requirements.txt` from the code directory."
+            ) from exc
+
+        import os
+
+        return ChatOpenAI(
+            model=config.model,
+            api_key=os.getenv("GITHUB_TOKEN"),
+            base_url=os.getenv("GITHUB_MODELS_BASE_URL", "https://models.github.ai/inference"),
+            temperature=config.temperature,
+        )
+
     try:
         from langchain.chat_models import init_chat_model
     except ImportError as exc:

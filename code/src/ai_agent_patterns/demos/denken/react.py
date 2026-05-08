@@ -1,3 +1,9 @@
+"""ReAct demo with LangChain tools.
+
+The code shows the Thought-Action-Observation idea through a LangChain agent.
+Offline mode still runs deterministic local tools so the control flow remains visible without API keys.
+"""
+
 from __future__ import annotations
 
 from ai_agent_patterns.config import pick_model_config

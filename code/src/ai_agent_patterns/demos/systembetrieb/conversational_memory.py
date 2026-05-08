@@ -1,3 +1,8 @@
+"""Conversational Memory demo with LangGraph checkpointing.
+
+The code stores conversation state when LangGraph is available and falls back to a deterministic local memory note otherwise.
+"""
+
 from __future__ import annotations
 
 import uuid

@@ -1,3 +1,8 @@
+"""Supervisor demo with a LangGraph StateGraph.
+
+The supervisor node chooses a specialist, then hands control to the researcher or builder node.
+"""
+
 from __future__ import annotations
 
 from typing import TypedDict
@@ -37,7 +42,7 @@ def run(prompt: str) -> str:
         state.update(_researcher(state) if _handoff(state) == "researcher" else _builder(state))
         return "\n".join(
             [
-                "Pattern: Supervisor / handoff state graph",
+                "Pattern: Supervisor",
                 "Mode: offline fallback (langgraph not installed)",
                 f"Specialist: {state['specialist']}",
                 state["result"],
@@ -61,7 +66,7 @@ def run(prompt: str) -> str:
     result = app.invoke({"request": prompt, "specialist": "", "result": ""})
     return "\n".join(
         [
-            "Pattern: Supervisor / handoff state graph",
+            "Pattern: Supervisor",
             f"Specialist: {result['specialist']}",
             result["result"],
         ]

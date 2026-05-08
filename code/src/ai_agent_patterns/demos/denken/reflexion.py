@@ -1,3 +1,8 @@
+"""Reflexion demo as generator, evaluator, and optimizer loop.
+
+The code uses LangGraph when available. The fallback keeps the same loop visible without dependencies.
+"""
+
 from __future__ import annotations
 
 from typing import TypedDict

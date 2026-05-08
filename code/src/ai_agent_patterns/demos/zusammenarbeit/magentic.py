@@ -1,3 +1,9 @@
+"""Magentic-style demo with Deep Agents.
+
+The code creates a coordinator with tools and subagents when deepagents is installed.
+The fallback explains the same planning, tool use, delegation, and memory mapping.
+"""
+
 from __future__ import annotations
 
 from ai_agent_patterns.config import pick_model_config

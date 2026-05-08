@@ -1,3 +1,8 @@
+"""Sequential Pipeline demo with LangChain prompt chains.
+
+The code runs extract, draft, and polish stages in order. Each stage receives the previous output.
+"""
+
 from __future__ import annotations
 
 from ai_agent_patterns.config import pick_model_config

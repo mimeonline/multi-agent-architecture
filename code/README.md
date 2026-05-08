@@ -1,22 +1,23 @@
 # AI Agent Patterns Demo Suite
 
-Practical Python demos under one CLI for common agent patterns using LangChain, LangGraph,
-LangSmith tracing, and Deep Agents.
+Praktische Python-Demos unter einer gemeinsamen CLI für zentrale Agent Patterns mit LangChain, LangGraph, LangSmith Tracing und Deep Agents.
 
-Every demo has a deterministic offline fallback, so the suite is useful even before API keys
-or optional packages are installed.
+Jede Demo hat einen deterministischen Offline-Fallback. Dadurch bleibt die Suite nutzbar, auch wenn noch keine API Keys oder optionalen Pakete installiert sind.
 
-## Patterns Included
+## Enthaltene Patterns
 
-- ReAct / tool calling with LangChain `create_agent`
-- Sequential pipeline with LangChain prompt chains
-- Routing with LangGraph conditional edges
-- Supervisor / handoff as a LangGraph state graph
-- Reflection / evaluator loop as a LangGraph state graph
-- Memory with LangGraph checkpointer or local fallback
-- Deep Agents coordinator with `create_deep_agent`, tools, and subagent specs
+Die Suite stellt Demos für alle Patterns aus der Landscape bereit:
 
-## Install
+- Denken: ReAct, Plan-and-Execute, ReWOO, Reflexion, Tree of Thoughts, Self-Consistency, CodeAct
+- Ablauf: Sequential Pipeline, Routing, Parallelization, Loop, Evaluator-Optimizer, Iterative Refinement, Orchestrator-Workers, Map-Reduce
+- Zusammenarbeit: Supervisor, Hierarchical Supervisor, Handoff, Swarm, Group Chat, Multi-Agent Debate, Magentic, Blackboard, Contract Net, Market-based, Agents-as-Tools, Graph-based Orchestration
+- Systembetrieb: Memory, Tool Integration, Runtime, Governance und Observability Capabilities
+
+Zentrale Patterns nutzen konkrete LangChain- oder LangGraph-Implementierungen. Infrastruktur-lastige Patterns nutzen deterministische Architekturskizzen mit ausführbarer CLI-Ausgabe.
+
+Jedes Pattern liegt in einer eigenen Python-Datei im passenden Domänenordner. Die Pattern-Dateien enthalten die agentische Logik selbst, inklusive lokaler LangChain `RunnableSequence`, LangGraph `StateGraph`, Deep Agents oder bewusst lokalem Python-Code. `demos/common.py` enthält nur Boilerplate wie Registry-Typen, Pattern-Metadaten-Typen und optionales LangSmith Tracing.
+
+## Installation
 
 ```bash
 cd code
@@ -26,34 +27,34 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-The `requirements.txt` path installs the full demo set, including Deep Agents. The editable install
-adds the local `agent-patterns` CLI.
+`requirements.txt` installiert das vollständige Demo-Set inklusive Deep Agents. Die editable install fügt die lokale `agent-patterns` CLI hinzu.
 
-## Configure
+## Konfiguration
 
 ```bash
 cp .env.example .env
 ```
 
-Set one provider key and choose a provider:
+Einen Provider Key setzen und einen Provider auswählen:
 
 ```bash
 export AGENT_PROVIDER=openai
 export OPENAI_API_KEY=...
 ```
 
-Supported provider envs:
+Unterstützte Provider-Umgebungsvariablen:
 
-- `OPENAI_API_KEY` with `AGENT_MODEL_OPENAI`
-- `ANTHROPIC_API_KEY` with `AGENT_MODEL_ANTHROPIC`
-- `OPENROUTER_API_KEY` with `AGENT_MODEL_OPENROUTER`
-- `OLLAMA_BASE_URL` with `AGENT_MODEL_OLLAMA`
+- `OPENAI_API_KEY` mit `AGENT_MODEL_OPENAI`
+- `ANTHROPIC_API_KEY` mit `AGENT_MODEL_ANTHROPIC`
+- `OPENROUTER_API_KEY` mit `AGENT_MODEL_OPENROUTER`
+- `GITHUB_TOKEN` mit `GITHUB_MODEL` und optional `GITHUB_MODELS_BASE_URL`
+- `OLLAMA_BASE_URL` mit `AGENT_MODEL_OLLAMA`
 
-Use `AGENT_PROVIDER=offline` or leave all keys unset for graceful fallback mode.
+`AGENT_PROVIDER=offline` nutzen oder alle Keys leer lassen, um den Fallback-Modus zu verwenden. `AGENT_PROVIDER=gh` wird als Kurzform für `AGENT_PROVIDER=github` akzeptiert.
 
 ## LangSmith
 
-LangSmith tracing is controlled entirely by env:
+LangSmith Tracing wird vollständig über Umgebungsvariablen gesteuert:
 
 ```bash
 export LANGSMITH_TRACING=true
@@ -61,23 +62,24 @@ export LANGSMITH_API_KEY=...
 export LANGSMITH_PROJECT=ai-agent-patterns-demo
 ```
 
-No code changes are needed. LangChain and LangGraph will emit traces when tracing is enabled.
+Es sind keine Code-Änderungen nötig. LangChain und LangGraph erzeugen Traces, sobald Tracing aktiviert ist.
 
 ## CLI
 
-List demos:
+Demos auflisten:
 
 ```bash
 agent-patterns list
+agent-patterns list --plain
 ```
 
-Run all demos:
+Alle Demos ausführen:
 
 ```bash
 agent-patterns run all
 ```
 
-Run one demo:
+Eine einzelne Demo ausführen:
 
 ```bash
 agent-patterns run react "Find 12 * 7 and summarize the tool result."
@@ -89,22 +91,16 @@ agent-patterns run memory "My name is Michael and I like concise demos."
 agent-patterns run deepagents "Research how agent handoffs should be documented."
 ```
 
-Run directly without installing:
+Direkt ohne Installation ausführen:
 
 ```bash
 python -m ai_agent_patterns.cli run all
 ```
 
-## Notes
+## Hinweise
 
-The LangChain v1 agent examples use `langchain.agents.create_agent` and model provider strings
-such as `openai:gpt-4.1-mini`, `openrouter:openai/gpt-4o-mini`, or `ollama:llama3.1`.
+Die LangChain v1 Agent-Beispiele nutzen `langchain.agents.create_agent` und Model Provider Strings wie `openai:gpt-4.1-mini`, `openrouter:openai/gpt-4o-mini` oder `ollama:llama3.1`. GitHub Models nutzt den OpenAI-kompatiblen Endpoint `https://models.github.ai/inference` mit Model IDs wie `openai/gpt-4.1-mini`.
 
-The Deep Agents demo follows the LangChain Deep Agents architecture: a main coordinator plans the
-task, uses tools, can delegate to named subagents, and can be extended with file-system-backed
-context, memory, permissions, stores, and checkpointers through `create_deep_agent`.
+Die Deep Agents Demo folgt der LangChain Deep Agents Architektur: Ein Coordinator plant die Aufgabe, nutzt Tools, kann an benannte Subagents delegieren und lässt sich über `create_deep_agent` mit file-system-backed context, Memory, Permissions, Stores und Checkpointers erweitern.
 
-The demos are defensive: if a package or API key is missing, the CLI reports a helpful fallback
-instead of crashing. After `pip install -r requirements.txt`, Routing, Reflection, Memory, and
-Supervisor/Handoff use LangGraph graphs, Sequential uses LangChain prompt chains, ReAct uses
-LangChain `create_agent`, and the Deep Agents demo uses `deepagents.create_deep_agent`.
+Die Demos sind defensiv gebaut: Wenn ein Paket oder API Key fehlt, meldet die CLI einen hilfreichen Fallback statt abzustürzen. Nach `pip install -r requirements.txt` nutzen Routing, Reflexion, Memory und Supervisor/Handoff LangGraph Graphs, Sequential nutzt LangChain Prompt Chains, ReAct nutzt LangChain `create_agent`, und die Deep Agents Demo nutzt `deepagents.create_deep_agent`.

@@ -1,3 +1,8 @@
+"""Routing demo with LangGraph conditional edges.
+
+The router classifies the prompt, chooses a specialized node, and records a trace through the graph.
+"""
+
 from __future__ import annotations
 
 from typing import TypedDict

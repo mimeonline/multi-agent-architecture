@@ -4,7 +4,10 @@
 # Environment and secrets
 .env
 .env.*
+code/.env
+code/.env.*
 !.env.example
+!code/.env.example
 
 # Python
 .venv/

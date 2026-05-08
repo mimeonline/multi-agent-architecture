@@ -1,25 +1,33 @@
 from __future__ import annotations
 
+from collections import OrderedDict
 from collections.abc import Callable
 
 DemoFn = Callable[[str], str]
 
 
 def registry() -> dict[str, DemoFn]:
-    from .deepagents_demo import run as deepagents
-    from .memory import run as memory
-    from .react_tool_calling import run as react
-    from .reflection import run as reflection
-    from .routing import run as routing
-    from .sequential import run as sequential
-    from .state_graph import run as graph
+    from .ablauf import registry as ablauf_registry
+    from .denken import registry as denken_registry
+    from .systembetrieb import registry as systembetrieb_registry
+    from .zusammenarbeit import registry as zusammenarbeit_registry
 
-    return {
-        "react": react,
-        "sequential": sequential,
-        "routing": routing,
-        "graph": graph,
-        "reflection": reflection,
-        "memory": memory,
-        "deepagents": deepagents,
+    demos: OrderedDict[str, DemoFn] = OrderedDict()
+
+    demos.update(denken_registry())
+    demos.update(ablauf_registry())
+    demos.update(zusammenarbeit_registry())
+    demos.update(systembetrieb_registry())
+
+    legacy_aliases = {
+        "prompt-chaining": demos["sequential-pipeline"],
+        "generator-critic": demos["evaluator-optimizer"],
+        "state-graph": demos["graph-based-orchestration"],
+        "memory": demos["conversational-memory"],
+        "deepagents": demos["magentic"],
+        "sequential": demos["sequential-pipeline"],
+        "reflection": demos["reflexion"],
+        "graph": demos["graph-based-orchestration"],
     }
+    demos.update(legacy_aliases)
+    return dict(demos)
