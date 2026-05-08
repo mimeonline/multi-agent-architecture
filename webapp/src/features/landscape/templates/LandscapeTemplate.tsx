@@ -1,5 +1,7 @@
 import Image from "next/image";
+import { ArrowRight, BookOpen, Network } from "lucide-react";
 import { SectionKicker } from "@/components/atoms/SectionKicker";
+import { Button } from "@/components/ui/button";
 import { DecisionGuide } from "../organisms/DecisionGuide";
 import { DomainSummary } from "../molecules/DomainSummary";
 import { FrameworkTable } from "../organisms/FrameworkTable";
@@ -17,8 +19,18 @@ export function LandscapeTemplate() {
             Architecture: Pattern verstehen, einordnen und in Code übertragen.
           </p>
           <div className="hero-actions" aria-label="Schnellzugriff">
-            <a className="button primary" href="#lookup">Pattern suchen</a>
-            <a className="button secondary" href="#decision">Decision-Heuristik</a>
+            <Button asChild>
+              <a href="#lookup">
+                <BookOpen aria-hidden="true" />
+                Pattern suchen
+              </a>
+            </Button>
+            <Button asChild variant="secondary">
+              <a href="#decision">
+                Decision-Heuristik
+                <ArrowRight aria-hidden="true" />
+              </a>
+            </Button>
           </div>
         </div>
         <div className="hero-visual" aria-hidden="true">
@@ -28,6 +40,7 @@ export function LandscapeTemplate() {
           <div className="orbit three">Agents</div>
           <div className="orbit four">Runtime</div>
         </div>
+        <Network className="hero-network-icon" aria-hidden="true" />
       </section>
 
       <section className="section intro" aria-labelledby="model-title">

@@ -32,6 +32,7 @@ Dieses Repository dokumentiert und demonstriert die AI Agent Pattern Landscape. 
 ## Webapp und Atomic Design
 
 - Die Webapp nutzt Next.js App Router mit TypeScript.
+- Styling basiert auf Tailwind CSS 4, CSS-Variablen und shadcn/ui-kompatiblen Primitives.
 - Seiten liegen in `webapp/src/app` und bleiben orchestration-only: Route lesen, Template rendern, keine Fachlogik.
 - Feature-Code liegt unter `webapp/src/features/<feature>/`.
 - Atomic Design ist verbindlich:
@@ -40,6 +41,7 @@ Dieses Repository dokumentiert und demonstriert die AI Agent Pattern Landscape. 
   - `organisms`: interaktive oder datenreiche Bereiche wie Pattern Explorer oder Decision Guide
   - `templates`: Seitenkompositionen, die Organisms und Layoutfluss zusammenführen
 - Globale, featureübergreifende Komponenten liegen in `webapp/src/components`.
+- shadcn/ui-kompatible Primitives liegen in `webapp/src/components/ui` und nutzen `webapp/src/lib/utils.ts`.
 - Feature-spezifische Komponenten bleiben im jeweiligen Feature-Ordner.
 - Reuse-Reihenfolge: erst bestehende globale Komponenten, dann feature-lokale Komponenten, erst danach neue Bausteine anlegen.
 - Presentational Components bleiben frei von Business-Logik.

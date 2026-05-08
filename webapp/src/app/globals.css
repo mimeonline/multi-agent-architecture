@@ -1,3 +1,15 @@
+@import "tailwindcss";
+
+@theme {
+  --color-landscape-ink: #172022;
+  --color-landscape-muted: #657174;
+  --color-landscape-paper: #fffdf8;
+  --color-landscape-surface: #f7f5ee;
+  --color-landscape-accent: #1f7a78;
+  --color-landscape-blue: #405f8e;
+  --color-landscape-warm: #e8a33d;
+}
+
 :root {
   --ink: #172022;
   --muted: #657174;
@@ -82,6 +94,7 @@ input {
 }
 
 .hero {
+  position: relative;
   display: grid;
   grid-template-columns: minmax(320px, 0.86fr) minmax(320px, 1.14fr);
   min-height: calc(100svh - 67px);
@@ -224,6 +237,16 @@ p {
 .orbit.two { top: 36%; right: 12%; animation-delay: -1.2s; }
 .orbit.three { bottom: 13%; left: 16%; animation-delay: -2.4s; }
 .orbit.four { bottom: 26%; right: 34%; animation-delay: -3.2s; }
+
+.hero-network-icon {
+  position: absolute;
+  right: clamp(20px, 4vw, 54px);
+  bottom: clamp(20px, 4vw, 54px);
+  z-index: 3;
+  width: 42px;
+  height: 42px;
+  color: rgba(255, 253, 248, 0.82);
+}
 
 .section,
 .workspace,
