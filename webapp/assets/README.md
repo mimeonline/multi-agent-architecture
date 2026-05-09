@@ -4,7 +4,7 @@ Medien für die Lernwebapp.
 
 ## Inhalte
 
-- `ai-agen-pattern-landscape.png`: Symlink auf `../../docs/ai-agen-pattern-landscape.png`
+- `ai-agen-pattern-landscape.png`: Kopie der Infografik aus `docs/`
 
 ## Pflege
 

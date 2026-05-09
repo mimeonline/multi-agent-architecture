@@ -1,5 +1,5 @@
 import Image from "next/image";
-import { ArrowRight, BookOpen, Brain, Network, Server, Users, Workflow } from "lucide-react";
+import { ArrowRight, BookOpen, Brain, ExternalLink, Network, Server, Users, Workflow } from "lucide-react";
 import { SectionKicker } from "@/components/atoms/SectionKicker";
 import { DecisionGuide } from "../organisms/DecisionGuide";
 import { DomainSummary } from "../molecules/DomainSummary";
@@ -27,6 +27,15 @@ export function LandscapeTemplate() {
             <a className="btn btn-secondary" href="#decision">
               Decision-Heuristik
               <ArrowRight aria-hidden="true" />
+            </a>
+            <a
+              className="btn btn-secondary"
+              href="https://github.com/mimeonline/multi-agent-architecture"
+              target="_blank"
+              rel="noreferrer"
+            >
+              GitHub
+              <ExternalLink aria-hidden="true" />
             </a>
           </div>
         </div>
@@ -103,11 +112,23 @@ export function LandscapeTemplate() {
             />
           </div>
           <figcaption>
-            Quelle: <a href="/docs/ai-agent-pattern-landscape.md">docs/ai-agent-pattern-landscape.md</a>
+            Quelle:{" "}
+            <a
+              href="https://github.com/mimeonline/multi-agent-architecture/blob/main/docs/ai-agent-pattern-landscape.md"
+              target="_blank"
+              rel="noreferrer"
+            >
+              docs/ai-agent-pattern-landscape.md
+            </a>
             <span> · </span>
-            Slides: <a href="/presentation/index.html">presentation/index.html</a>
-            <span> · </span>
-            Code: <a href="/code/README.md">code/README.md</a>
+            Repository:{" "}
+            <a
+              href="https://github.com/mimeonline/multi-agent-architecture"
+              target="_blank"
+              rel="noreferrer"
+            >
+              GitHub
+            </a>
           </figcaption>
         </figure>
       </section>
@@ -125,7 +146,14 @@ export function LandscapeTemplate() {
           </p>
         </div>
         <p className="demo-link">
-          Einstieg in die Implementierung: <a href="/code/README.md">code/README.md</a>
+          Einstieg in die Implementierung:{" "}
+          <a
+            href="https://github.com/mimeonline/multi-agent-architecture/tree/main/code"
+            target="_blank"
+            rel="noreferrer"
+          >
+            code/README.md auf GitHub
+          </a>
         </p>
         <pre className="code-panel"><code>{`cd code
 pip install -r requirements.txt

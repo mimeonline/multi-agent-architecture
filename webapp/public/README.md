@@ -2,10 +2,10 @@
 
 Statische Assets der Next.js Webapp.
 
-`ai-agen-pattern-landscape.png` ist ein Symlink auf `../../docs/ai-agen-pattern-landscape.png`.
+`ai-agen-pattern-landscape.png` ist eine echte Kopie aus `docs/`, damit die Webapp isoliert auf Vercel deploybar ist.
 
-Zusätzlich liegen hier Symlinks auf zentrale Projektbereiche, damit die Webapp lokal direkt auf die Artefakte verweisen kann:
+Projektartefakte außerhalb der Webapp werden nicht mehr als Symlinks ausgeliefert. Die Webapp verweist stattdessen auf GitHub:
 
-- `docs/`: Theorie, Prompt und Infografik
-- `presentation/`: Reveal.js Slides
-- `code/`: Python-Demos mit LangChain, LangGraph, LangSmith und Deep Agents
+- Repository: https://github.com/mimeonline/multi-agent-architecture
+- Docs: https://github.com/mimeonline/multi-agent-architecture/tree/main/docs
+- Code: https://github.com/mimeonline/multi-agent-architecture/tree/main/code

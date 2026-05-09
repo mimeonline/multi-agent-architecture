@@ -17,7 +17,7 @@ Next.js startet standardmäßig auf `http://localhost:3000`. Das Dev-Script nutz
 - `src/features/landscape/`: Pattern-Daten, Types, Organisms und Template
 - `src/components/`: featureübergreifende Atomic-Design-Komponenten und shadcn/ui-Primitives
 - `src/lib/`: gemeinsame Utilities, aktuell `cn()` für shadcn/ui
-- `public/`: statische Assets und Symlinks auf `docs`, `presentation` und `code`
+- `public/`: statische Assets für den isolierten Vercel-Deploy
 - `index.html`, `src/app.js`, `src/styles.css`: Legacy-Version der statischen Webapp, bleibt vorerst als Referenz liegen
 
 ## Zweck
