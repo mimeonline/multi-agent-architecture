@@ -3,36 +3,29 @@
 import Image from "next/image";
 import { useState } from "react";
 import { SectionKicker } from "@/components/atoms/SectionKicker";
-import { FrameworkTable } from "@/features/landscape/organisms/FrameworkTable";
 import { PatternExplorer } from "@/features/landscape/organisms/PatternExplorer";
-import { capabilityNotes } from "../lib/atlas-content";
 import { QuickStats } from "../atoms/QuickStats";
 import { SubNav } from "../atoms/SubNav";
-import { CopyButton } from "../atoms/CopyButton";
 import { HighlightProvider } from "@/features/landscape/lib/highlightContext";
 
 const SUB_NAV = [
   { id: "landscape", label: "Landscape" },
   { id: "lookup", label: "Explorer" },
   { id: "demos", label: "Implementation Lab" },
-  { id: "tooling", label: "Tooling" },
+  { id: "tooling", label: "Tooling-Hinweis" },
 ];
 
 type Props = {
   highlightedPatterns: Record<string, string>;
-  highlightedShell: string;
-  runSnippet: string;
 };
 
 export function PatternsTemplate({
   highlightedPatterns,
-  highlightedShell,
-  runSnippet,
 }: Props) {
   const [zoom, setZoom] = useState(false);
 
   return (
-    <HighlightProvider value={{ patterns: highlightedPatterns, shellSnippet: highlightedShell }}>
+    <HighlightProvider value={{ patterns: highlightedPatterns, shellSnippet: "" }}>
     <main id="top">
       <section className="page-hero with-stats" aria-labelledby="page-title">
         <SectionKicker>Patterns</SectionKicker>
@@ -116,42 +109,29 @@ export function PatternsTemplate({
       <section id="demos" className="section demos" aria-labelledby="demos-title">
         <div className="section-heading">
           <SectionKicker>Implementation Lab</SectionKicker>
-          <h2 id="demos-title">Ausführbare Proofs unter der Architektur.</h2>
+          <h2 id="demos-title">Patterns praktisch ausprobieren.</h2>
           <p>
-            Die Python-Demos bleiben kleine Pattern-Skizzen mit Offline-Fallback. Sie beweisen
-            ausgewählte Mechaniken, ohne den Atlas zum Code-Demo-Projekt zu machen.
+            Im Implementation Lab findest du kleine Python-Demos zu ausgewählten Patterns. Sie
+            zeigen, wie die Ideen im Code aussehen und funktionieren auch ohne API Key mit
+            erklärendem Output.
           </p>
         </div>
-        <div className="capability-row">
-          {capabilityNotes.map((note) => {
-            const Icon = note.icon;
-            return (
-              <a className="capability-note" href={note.href} key={note.title}>
-                <Icon aria-hidden="true" />
-                <strong>{note.title}</strong>
-                <span>{note.text}</span>
-              </a>
-            );
-          })}
-        </div>
         <p className="demo-link">
-          Vertiefung: <a href="/implementation-lab">Implementation Lab öffnen</a>
+          Praktisch testen: <a href="/implementation-lab">Implementation Lab öffnen</a>
         </p>
-        <div className="code-panel-wrap">
-          <div className="code-panel-toolbar">
-            <CopyButton text={runSnippet} label="Befehle kopieren" />
-          </div>
-          <div
-            className="code-panel shiki-panel"
-            dangerouslySetInnerHTML={{ __html: highlightedShell }}
-          />
-        </div>
       </section>
 
-      <section id="tooling" aria-label="Tooling Compatibility">
-        <FrameworkTable />
+      <section id="tooling" className="section demos" aria-labelledby="tooling-title">
+        <div className="section-heading">
+          <SectionKicker>Tooling</SectionKicker>
+          <h2 id="tooling-title">Passende Frameworks einordnen.</h2>
+          <p>
+            Tooling Compatibility zeigt, welche Frameworks bestimmte Patterns besonders gut
+            unterstützen und wo sie eher ergänzend eingesetzt werden sollten.
+          </p>
+        </div>
         <p className="demo-link tooling-deep-link">
-          Vertiefung: <a href="/tooling-compatibility">Tooling Compatibility öffnen</a>
+          Frameworks vergleichen: <a href="/tooling-compatibility">Tooling Compatibility öffnen</a>
         </p>
       </section>
     </main>
