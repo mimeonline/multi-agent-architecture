@@ -9,7 +9,12 @@
       "Bash(curl -s http://localhost:3001/foundations)",
       "Bash(curl -s \"http://localhost:3001/foundations?bust=$\\(date +%s\\)\")",
       "Bash(curl -s -o /tmp/foundations.html http://localhost:3001/foundations)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(npx tsc *)",
+      "Bash(npx next *)",
+      "Bash(npm audit *)",
+      "Bash(sed -i '' '4003,4104d' webapp/src/app/globals.css)",
+      "Bash(sed -n '4000,4008p' webapp/src/app/globals.css)"
     ]
   }
 }

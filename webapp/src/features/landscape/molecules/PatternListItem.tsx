@@ -1,6 +1,7 @@
 import type { Pattern } from "../types/pattern";
 import { PatternIcon } from "../atoms/PatternIcon";
 import { ComplexityBadge } from "../atoms/ComplexityBadge";
+import { Highlight } from "../atoms/Highlight";
 
 type PatternListItemProps = {
   pattern: Pattern;
@@ -8,6 +9,7 @@ type PatternListItemProps = {
   compared: boolean;
   onSelect: (pattern: Pattern) => void;
   onToggleCompare: (pattern: Pattern) => void;
+  query?: string;
 };
 
 export function PatternListItem({
@@ -16,11 +18,16 @@ export function PatternListItem({
   compared,
   onSelect,
   onToggleCompare,
+  query = "",
 }: PatternListItemProps) {
+  const subline = pattern.subdomain
+    ? `${pattern.domain} · ${pattern.subdomain}`
+    : pattern.domain;
   return (
     <div
       className={`pattern-row${selected ? " is-selected" : ""}${compared ? " is-compared" : ""}`}
       data-domain={pattern.domain}
+      data-name={pattern.name}
     >
       <button
         className="pattern-row-main"
@@ -32,9 +39,11 @@ export function PatternListItem({
           <PatternIcon name={pattern.icon} size={16} />
         </span>
         <span className="name">
-          <strong>{pattern.name}</strong>
+          <strong>
+            <Highlight text={pattern.name} query={query} />
+          </strong>
           <small>
-            {pattern.subdomain ? `${pattern.domain} · ${pattern.subdomain}` : pattern.domain}
+            <Highlight text={subline} query={query} />
           </small>
         </span>
         <ComplexityBadge complexity={pattern.complexity} compact />

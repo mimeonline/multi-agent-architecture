@@ -4,10 +4,12 @@ import { PatternIcon } from "../atoms/PatternIcon";
 import { ComplexityBadge } from "../atoms/ComplexityBadge";
 import { TraitChip } from "../atoms/TraitChip";
 import { CodeBlock } from "../atoms/CodeBlock";
+import { Highlight } from "../atoms/Highlight";
 
 type PatternDetailProps = {
   pattern: Pattern;
   onJump?: (name: string) => void;
+  query?: string;
 };
 
 const KIND_LABEL: Record<RelatedKind, string> = {
@@ -16,7 +18,7 @@ const KIND_LABEL: Record<RelatedKind, string> = {
   contrasts: "Abgrenzung",
 };
 
-export function PatternDetail({ pattern, onJump }: PatternDetailProps) {
+export function PatternDetail({ pattern, onJump, query = "" }: PatternDetailProps) {
   return (
     <aside className="pattern-detail" data-domain={pattern.domain} aria-live="polite">
       <header className="detail-header">
@@ -27,12 +29,16 @@ export function PatternDetail({ pattern, onJump }: PatternDetailProps) {
           <span className="detail-tag">
             {pattern.subdomain ? `${pattern.domain} · ${pattern.subdomain}` : pattern.domain}
           </span>
-          <h3>{pattern.name}</h3>
+          <h3>
+            <Highlight text={pattern.name} query={query} />
+          </h3>
         </div>
         <ComplexityBadge complexity={pattern.complexity} />
       </header>
 
-      <p className="detail-idea">{pattern.idea}</p>
+      <p className="detail-idea">
+        <Highlight text={pattern.idea} query={query} />
+      </p>
 
       {pattern.traits.length > 0 && (
         <div className="trait-row">
@@ -72,7 +78,7 @@ export function PatternDetail({ pattern, onJump }: PatternDetailProps) {
 
       <section className="detail-section">
         <p className="detail-label">Code-Skizze</p>
-        <CodeBlock code={pattern.code} />
+        <CodeBlock code={pattern.code} patternName={pattern.name} />
       </section>
 
       {pattern.example && pattern.example.length > 0 && (
