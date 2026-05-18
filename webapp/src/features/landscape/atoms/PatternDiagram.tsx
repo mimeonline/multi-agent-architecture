@@ -471,7 +471,7 @@ function TreeShape({ nodes }: { nodes: string[] }) {
 }
 
 const DOMAIN_COLORS: Record<Domain, { fill: string; stroke: string; bg: string; fg: string }> = {
-  Denken: { fill: "#a855f7", stroke: "#a855f7", bg: "#f7efff", fg: "white" },
+  Denken: { fill: "#0ea5e9", stroke: "#0ea5e9", bg: "#e0f2fe", fg: "white" },
   Ablauf: { fill: "#14b8a6", stroke: "#14b8a6", bg: "#e6fbf6", fg: "white" },
   Zusammenarbeit: { fill: "#f59e0b", stroke: "#f59e0b", bg: "#fff5e1", fg: "#1a1a1a" },
   Systembetrieb: { fill: "#6366f1", stroke: "#6366f1", bg: "#ecedff", fg: "white" },

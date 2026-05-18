@@ -6,6 +6,12 @@ import {
   Landmark,
   Network,
   ShieldCheck,
+  Layers,
+  Workflow,
+  Briefcase,
+  Code2,
+  GraduationCap,
+  Users,
 } from "lucide-react";
 import type {
   AtlasDomain,
@@ -243,6 +249,105 @@ export const referenceArchitectures: ReferenceArchitecture[] = [
     components: ["Query Planner", "Retrieval Layer", "Source Store", "Evaluator", "Citation Renderer", "Trace Store"],
     keyDecisions: ["RAG vs GraphRAG", "Source Ranking", "Evaluation", "Cost Control"],
     governanceConcerns: ["Quellenqualität", "Copyright-nahe Ausgabe", "PII in Such- und Trace-Daten"],
+  },
+];
+
+export const heroStats = [
+  { value: "4", label: "Wissensdomänen", hint: "Foundations · Patterns · Architecture · Governance" },
+  { value: "30+", label: "Architektur-Items", hint: "Foundations, Architecture, Governance & Decisions" },
+  { value: "25+", label: "Pattern-Demos", hint: "Reasoning, Workflow, Collaboration, Runtime" },
+  { value: "100%", label: "Open Source", hint: "MIT-lizenziert auf GitHub, offen erweiterbar" },
+];
+
+export const atlasSteps = [
+  {
+    step: "01",
+    title: "Foundations verstehen",
+    description: "Starte mit LLM-Boundary, Context, Tool Calling, Memory und Evaluation. Erst die Bausteine, dann die Komposition.",
+    icon: Layers,
+    href: "/foundations",
+  },
+  {
+    step: "02",
+    title: "Patterns auswählen",
+    description: "Nutze die Pattern Landscape, um Reasoning-, Workflow- und Kollaborationsformen passend zur Aufgabe zu wählen.",
+    icon: Workflow,
+    href: "/patterns",
+  },
+  {
+    step: "03",
+    title: "Architecture entwerfen",
+    description: "Definiere Service Boundaries, State, Orchestration, Observability und Cost als bewusste Designentscheidungen.",
+    icon: GitBranch,
+    href: "/architecture",
+  },
+  {
+    step: "04",
+    title: "Governance verankern",
+    description: "Verbinde AI Security, Datenschutz, EU AI Act, Audit Trails und Human Oversight von Anfang an mit der Architektur.",
+    icon: ShieldCheck,
+    href: "/governance",
+  },
+];
+
+export const atlasPersonas = [
+  {
+    title: "AI / Software Architects",
+    icon: Briefcase,
+    description: "Strukturierte Entscheidungssprache für AI-Systeme jenseits einzelner Frameworks oder Demos.",
+    accent: "denken" as const,
+  },
+  {
+    title: "Engineering Teams",
+    icon: Code2,
+    description: "Wiederverwendbare Patterns, Reference Architectures und ausführbare Implementation-Lab-Demos als Belege.",
+    accent: "ablauf" as const,
+  },
+  {
+    title: "Tech Leads & PMs",
+    icon: Users,
+    description: "Verständliche Trade-offs, klare Failure Modes und Governance-Hinweise für tragfähige Roadmap-Diskussionen.",
+    accent: "system" as const,
+  },
+  {
+    title: "Lernende & Researcher",
+    icon: GraduationCap,
+    description: "Architektur-erste Lernreise durch AI-Konzepte mit Quellenverweisen und einem konsistenten mentalen Modell.",
+    accent: "zusammen" as const,
+  },
+];
+
+export const atlasQuote = {
+  text: "Patterns sind nicht der Code, sondern die wiederverwendbare Architekturentscheidung dahinter. Wer Pattern und Implementierung verwechselt, baut AI-Systeme auf Treibsand.",
+  attribution: "Leitgedanke des Atlas",
+  context: "Architecture first. Implementation proves it. Frameworks support it.",
+};
+
+export const atlasFaq = [
+  {
+    question: "Was unterscheidet den Atlas von einem Framework-Katalog?",
+    answer:
+      "Der Atlas ist eine Landkarte für Architekturentscheidungen, kein Tooling-Vergleich. Frameworks tauchen als unterstützende Metadaten auf, nicht als Taxonomie. So bleibt die Struktur stabil, auch wenn sich der Tool-Markt bewegt.",
+  },
+  {
+    question: "Für welche AI-Systeme ist der Atlas gedacht?",
+    answer:
+      "Für jedes System, das LLMs in Tools, Workflows oder Produkte integriert. Vom einfachen Tool-using Assistant bis zum produktiven Multi-Agent-System. Der Fokus liegt auf robusten Architekturen jenseits von Prototypen.",
+  },
+  {
+    question: "Brauche ich Vorwissen, um zu starten?",
+    answer:
+      "Wenn du AI-Konzepte wie Prompting und Tool Calling grob kennst, kannst du sofort einsteigen. Foundations bauen das mentale Modell auf, Patterns liefern bewährte Strukturen, und Reference Architectures zeigen vollständige Systemkompositionen.",
+  },
+  {
+    question: "Wie aktuell sind die Inhalte?",
+    answer:
+      "Der Atlas ist ein lebendiges Repository auf GitHub. Patterns, Foundations und Governance werden weiter ausgebaut, das Implementation Lab demonstriert die Konzepte mit lauffähigem Python-Code und Offline-Fallback.",
+  },
+  {
+    question: "Welche Rolle spielen die Code-Demos?",
+    answer:
+      "Sie sind Belege, nicht der Star. Jede Demo zeigt ein Pattern oder eine Runtime-Mechanik in minimaler Form, damit du Theorie und Praxis verbinden kannst — ohne einen ganzen Stack zu adoptieren.",
   },
 ];
 
