@@ -173,12 +173,12 @@ export function DecisionGuide() {
       )}
 
       <div className="guide-framing">
-        <div>
+        <div className="when-box when-fit">
           <p className="guide-framing-label"><Check size={14} aria-hidden /> Passend wenn</p>
           <p>{guide.whenToUse}</p>
         </div>
         {guide.whenNotToUse && (
-          <div>
+          <div className="when-box when-misfit">
             <p className="guide-framing-label"><X size={14} aria-hidden /> Nicht für</p>
             <p>{guide.whenNotToUse}</p>
           </div>

@@ -29,12 +29,52 @@ export type AtlasDomain = {
   icon: LucideIcon;
 };
 
+export type ReferenceComponent = {
+  name: string;
+  role: string;
+};
+
+export type ReferenceDecision = {
+  question: string;
+  choice: string;
+  rationale: string;
+};
+
+export type ReferenceGovernance = {
+  concern: string;
+  mitigation: string;
+};
+
+export type ReferenceVariant = {
+  name: string;
+  summary: string;
+};
+
+export type ReferenceDiagramStep = {
+  label: string;
+  detail?: string;
+};
+
+export type ReferenceComplexity = "Einsteiger" | "Fortgeschritten" | "Production";
+export type ReferenceAutonomy = "Workflow" | "Single Agent" | "Multi-Agent";
+
 export type ReferenceArchitecture = {
+  slug: string;
   title: string;
+  tagline: string;
   scenario: string;
-  components: string[];
-  keyDecisions: string[];
-  governanceConcerns: string[];
+  complexity: ReferenceComplexity;
+  autonomy: ReferenceAutonomy;
+  domain: string;
+  whenToUse: string[];
+  whenNotToUse: string[];
+  patternComposition: string[];
+  components: ReferenceComponent[];
+  diagram: ReferenceDiagramStep[];
+  keyDecisions: ReferenceDecision[];
+  governance: ReferenceGovernance[];
+  failureModes: string[];
+  variants: ReferenceVariant[];
 };
 
 export type ImplementationLabGroup = {
