@@ -5,6 +5,9 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "AI Systems Atlas",
   description: "Architecture-first Knowledge Platform für robuste AI-Systeme.",
+  icons: {
+    icon: "/favicon.svg",
+  },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -13,7 +16,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body>
         <header className="site-header">
           <Link className="brand" href="/" aria-label="AI Systems Atlas Start">
-            <span className="brand-mark">A</span>
+            <span className="brand-mark" aria-hidden="true">
+              <img src="/atlas-logo.svg" alt="" width="32" height="32" />
+            </span>
             <span>AI Systems Atlas</span>
           </Link>
           <nav className="top-nav" aria-label="Hauptnavigation">

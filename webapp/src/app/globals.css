@@ -96,16 +96,20 @@ button, input { font: inherit; }
 
 .brand-mark {
   display: grid;
+  flex: 0 0 32px;
   width: 32px;
   height: 32px;
   place-items: center;
   border-radius: 10px;
-  background: linear-gradient(135deg, var(--ablauf), var(--navy-800) 58%, var(--zusammen));
-  color: white;
-  font-size: 0.78rem;
-  font-weight: 900;
-  letter-spacing: -0.02em;
-  box-shadow: 0 8px 22px rgba(20, 184, 166, 0.28);
+  overflow: hidden;
+  background: linear-gradient(135deg, #174a73, #3b82f6);
+  box-shadow: 0 8px 22px rgba(37, 99, 235, 0.28);
+}
+
+.brand-mark img {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
 
 .top-nav {

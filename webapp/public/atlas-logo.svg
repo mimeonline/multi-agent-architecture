@@ -1,0 +1,28 @@
+<svg width="128" height="128" viewBox="0 0 128 128" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="128" height="128" rx="30" fill="url(#bg)"/>
+  <path d="M29 82C42 45 86 35 101 55" stroke="url(#orbitA)" stroke-width="6" stroke-linecap="round"/>
+  <path d="M28 49C46 73 83 85 103 64" stroke="url(#orbitB)" stroke-width="4" stroke-linecap="round" opacity=".72"/>
+  <circle cx="33" cy="48" r="5" fill="#60A5FA"/>
+  <circle cx="100" cy="64" r="4" fill="#93C5FD"/>
+  <path d="M42 92L60.5 36H69.5L88 92H77.5L73.7 79.5H56.3L52.5 92H42ZM58.9 70.8H71.1L65 50.6L58.9 70.8Z" fill="url(#letter)"/>
+  <path d="M64 19C88.9 19 109 39.1 109 64C109 88.9 88.9 109 64 109C39.1 109 19 88.9 19 64C19 39.1 39.1 19 64 19Z" stroke="white" stroke-opacity=".13" stroke-width="2"/>
+  <defs>
+    <linearGradient id="bg" x1="18" y1="15" x2="113" y2="118" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#174A73"/>
+      <stop offset=".46" stop-color="#0B1B2F"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+    <linearGradient id="orbitA" x1="29" y1="78" x2="103" y2="48" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#60A5FA"/>
+      <stop offset="1" stop-color="#2563EB"/>
+    </linearGradient>
+    <linearGradient id="orbitB" x1="29" y1="51" x2="103" y2="65" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#DBEAFE"/>
+      <stop offset="1" stop-color="#3B82F6"/>
+    </linearGradient>
+    <linearGradient id="letter" x1="48" y1="39" x2="82" y2="91" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F8FAFC"/>
+      <stop offset="1" stop-color="#BFDBFE"/>
+    </linearGradient>
+  </defs>
+</svg>
