@@ -68,11 +68,27 @@ export type Pattern = {
   example?: ExampleStep[];
 };
 
+export type DecisionRecommendation = {
+  pattern: string;
+  note: string;
+};
+
 export type DecisionStep = {
+  id: string;
   question: string;
   yes: string;
   no: string;
-  recommendation: string[];
+  recommendations: DecisionRecommendation[];
+};
+
+export type DecisionGuide = {
+  id: string;
+  title: string;
+  kicker: string;
+  intro: string;
+  whenToUse: string;
+  whenNotToUse?: string;
+  steps: DecisionStep[];
 };
 
 export type GlossaryEntry = {

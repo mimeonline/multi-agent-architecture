@@ -8,8 +8,8 @@ export function DecisionGuidesTemplate() {
         <SectionKicker>Decision Guides</SectionKicker>
         <h1 id="page-title">Architekturentscheidungen statt Pattern-Raten.</h1>
         <p>
-          Decision Guides übersetzen den Atlas in konkrete Auswahlfragen. Sie zeigen Optionen,
-          Trade-offs und typische Kandidaten für robuste AI-Systeme.
+          Interaktive Leitfragen, die Atlas-Patterns in eine engere Auswahl übersetzen.
+          Antworte mit Ja oder Nein – am Ende stehen verlinkte Kandidaten und der nächste Schritt.
         </p>
       </section>
       <DecisionGuide />

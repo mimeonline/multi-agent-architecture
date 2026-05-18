@@ -1,7 +1,7 @@
 import type {
   CodeSnippet,
   Complexity,
-  DecisionStep,
+  DecisionGuide,
   Diagram,
   Domain,
   ExampleStep,
@@ -1754,48 +1754,148 @@ export const domains: Array<Domain | "Alle"> = [
   "Systembetrieb",
 ];
 
-export const decisionSteps: DecisionStep[] = [
+export const decisionGuides: DecisionGuide[] = [
   {
-    question: "Reicht ein einzelner Prompt mit gutem Prompt-Engineering?",
-    yes: "Direkter Modell-Call. Stop.",
-    no: "Prüfen, ob externe Daten, Tools oder mehr Struktur nötig sind.",
-    recommendation: ["Direct Model Call", "Self-Consistency", "Reflexion"],
+    id: "pattern-choice",
+    kicker: "Pattern-Wahl",
+    title: "Vom Problem zum Pattern-Kandidaten.",
+    intro:
+      "Beantworte die Leitfragen der Reihe nach. Du sammelst pro Antwort wahrscheinliche Kandidaten – keine Festlegung, sondern eine Auswahl.",
+    whenToUse:
+      "Wenn ein neues AI-Feature ansteht und unklar ist, ob ein Prompt, ein Workflow oder ein Agenten-Setup passt.",
+    whenNotToUse:
+      "Reines Prompt-Tuning oder rein klassische Software – hier hilft der Atlas nicht weiter.",
+    steps: [
+      {
+        id: "prompt-only",
+        question: "Reicht ein einzelner Prompt mit gutem Prompt-Engineering?",
+        yes: "Direkter Modell-Call. Stop – Komplexität wäre nicht gerechtfertigt.",
+        no: "Externe Daten, Tools oder Struktur sind nötig. Weiter prüfen.",
+        recommendations: [
+          { pattern: "Self-Consistency", note: "Mehrere Samples + Mehrheitsentscheid bei wackliger Antwortqualität." },
+          { pattern: "Reflexion", note: "Selbstkritik-Loop, wenn ein Schuss zu unzuverlässig ist." },
+          { pattern: "Tree of Thoughts", note: "Wenn der Lösungsraum explizit erkundet werden muss." },
+        ],
+      },
+      {
+        id: "tools-needed",
+        question: "Braucht es externe Interaktion oder Datenzugriff?",
+        yes: "Tool-enabled Design – Function Calling, ReAct oder MCP.",
+        no: "Reasoning-Pattern reicht – kein Tool-Layer einziehen.",
+        recommendations: [
+          { pattern: "Function Calling", note: "Schmalste Variante, wenn die Toolauswahl klein und stabil ist." },
+          { pattern: "ReAct", note: "Reasoning + Acting im Loop, wenn das Modell Tools dynamisch wählen soll." },
+          { pattern: "MCP (Model Context Protocol)", note: "Wenn Tools/Datenquellen standardisiert und wiederverwendbar sein müssen." },
+        ],
+      },
+      {
+        id: "predictable",
+        question: "Ist der Ablauf vorhersagbar?",
+        yes: "Workflow-Pattern aus Domäne Ablauf – billig, testbar, betreibbar.",
+        no: "Agentisches Design prüfen – nur wenn der Autonomie-Bedarf echt ist.",
+        recommendations: [
+          { pattern: "Sequential Pipeline (Prompt Chaining)", note: "Schritte sind fest, Output je Stufe klar definiert." },
+          { pattern: "Routing", note: "Eingabe verzweigt deterministisch in mehrere Spezialisten-Pfade." },
+          { pattern: "Map-Reduce", note: "Große Inputs parallel verarbeiten und aggregieren." },
+        ],
+      },
+      {
+        id: "single-agent",
+        question: "Reicht ein autonomer Agent?",
+        yes: "Single Agent mit ReAct oder Plan-and-Execute genügt meist.",
+        no: "Zusammenarbeit modellieren – aber bewusst, nicht reflexhaft.",
+        recommendations: [
+          { pattern: "ReAct", note: "Schritt-für-Schritt-Autonomie mit Tool Use." },
+          { pattern: "Plan-and-Execute", note: "Trennt Planen und Ausführen – planbarer, besser debuggbar." },
+          { pattern: "ReWOO", note: "Plan ohne Beobachtungen – günstiger bei teuren Modellen." },
+        ],
+      },
+      {
+        id: "specialists",
+        question: "Sind echte Spezialisten nötig?",
+        yes: "Multi-Agent-Pattern aus Domäne Zusammenarbeit.",
+        no: "Single Agent + Capability Routing oder Agents-as-Tools.",
+        recommendations: [
+          { pattern: "Supervisor", note: "Ein Orchestrator delegiert an klar spezialisierte Worker." },
+          { pattern: "Handoff", note: "Sequentielle Übergabe wenn der nächste Schritt eine andere Rolle braucht." },
+          { pattern: "Agents-as-Tools", note: "Andere Agents werden vom Hauptagent wie Tools aufgerufen." },
+        ],
+      },
+      {
+        id: "open-coordination",
+        question: "Müssen mehrere Agents autonom ohne festen Plan kooperieren?",
+        yes: "Offene Koordination – Magentic, Group Chat oder Blackboard.",
+        no: "Supervisor oder Handoff reichen.",
+        recommendations: [
+          { pattern: "Magentic", note: "Dynamische Plan-Anpassung mit zentraler Koordination." },
+          { pattern: "Group Chat", note: "Mehrere Agents diskutieren – Vorsicht bei Kosten und Latenz." },
+          { pattern: "Blackboard", note: "Geteilter Speicher als Koordinationspunkt – sehr lose Kopplung." },
+        ],
+      },
+      {
+        id: "production",
+        question: "Geht es in Richtung Production?",
+        yes: "Systembetrieb ist Pflicht – Runtime, Memory, Governance, Observability, Evaluation.",
+        no: "Prototyp bewusst schlank halten und Risiken dokumentieren.",
+        recommendations: [
+          { pattern: "Workflow DAG / Durable Execution", note: "Wiederaufnehmbare, idempotente Läufe – Pflicht für Long-Running-Agenten." },
+          { pattern: "Human-in-the-Loop Approval Gate", note: "Eingriffspunkt bevor irreversible Aktionen ausgeführt werden." },
+          { pattern: "Distributed Tracing", note: "Ohne Traces ist Multi-Agent-Debugging hoffnungslos." },
+        ],
+      },
+    ],
   },
   {
-    question: "Braucht es externe Interaktion oder Datenzugriff?",
-    yes: "Tool-enabled Design prüfen: Function Calling, ReAct oder MCP.",
-    no: "Reasoning Pattern prüfen: Self-Consistency, Tree of Thoughts oder Reflexion.",
-    recommendation: ["Function Calling", "ReAct", "MCP (Model Context Protocol)"],
-  },
-  {
-    question: "Ist der Ablauf vorhersagbar?",
-    yes: "Workflow-Pattern aus Domäne Ablauf wählen.",
-    no: "Agentisches Design prüfen.",
-    recommendation: ["Sequential Pipeline", "Routing", "Map-Reduce"],
-  },
-  {
-    question: "Reicht ein autonomer Agent?",
-    yes: "Single Agent mit ReAct oder Plan-and-Execute ist meist ausreichend.",
-    no: "Zusammenarbeit modellieren.",
-    recommendation: ["ReAct", "Plan-and-Execute", "Supervisor"],
-  },
-  {
-    question: "Sind echte Spezialisten nötig?",
-    yes: "Multi-Agent-Pattern aus Domäne Zusammenarbeit wählen.",
-    no: "Single Agent mit gutem Tool-Design und Capability Routing bevorzugen.",
-    recommendation: ["Handoff", "Supervisor", "Agents-as-Tools"],
-  },
-  {
-    question: "Müssen mehrere Agents autonom ohne festen Plan kooperieren?",
-    yes: "Magentic, Group Chat oder Blackboard prüfen.",
-    no: "Supervisor oder Handoff reichen meist.",
-    recommendation: ["Magentic", "Group Chat", "Blackboard"],
-  },
-  {
-    question: "Geht es in Richtung Production?",
-    yes: "Systembetrieb ist verpflichtend: Memory, Runtime, Governance, Observability und Evaluation.",
-    no: "Für Prototypen bewusst schlank bleiben und Risiken dokumentieren.",
-    recommendation: ["Workflow DAG / Durable Execution", "Human-in-the-Loop Approval Gate", "Distributed Tracing"],
+    id: "memory-strategy",
+    kicker: "Memory-Strategie",
+    title: "Welcher Memory-Layer passt zum Agenten?",
+    intro:
+      "Memory ist selten ein einzelnes Pattern – meist ein Stack. Diese Fragen helfen, den richtigen Layer zuerst zu setzen.",
+    whenToUse:
+      "Wenn ein Agent über mehrere Turns oder Sessions hinweg sinnvoll handeln soll und unklar ist, was er sich merken muss.",
+    whenNotToUse:
+      "Reine Single-Shot-Anfragen oder Workflows ohne State – hier ist Memory unnötiger Overhead.",
+    steps: [
+      {
+        id: "multi-turn",
+        question: "Hält der Agent Konversation über mehrere Turns?",
+        yes: "Conversational Memory oder ein Scratchpad fürs aktuelle Reasoning.",
+        no: "Stateless reicht – keinen Memory-Layer einführen.",
+        recommendations: [
+          { pattern: "Conversational Memory", note: "Standard für Chat-Setups – Vorsicht bei wachsendem Kontext." },
+          { pattern: "Working Memory / Scratchpad", note: "Temporäre Notizen innerhalb eines Tasks." },
+        ],
+      },
+      {
+        id: "external-knowledge",
+        question: "Soll der Agent auf externes, wachsendes Wissen zugreifen?",
+        yes: "Retrieval-basierter Memory mit Embeddings oder semantischem Layer.",
+        no: "Modellwissen + Prompt-Kontext reichen.",
+        recommendations: [
+          { pattern: "Vector Memory", note: "Dichte-Embeddings + Ähnlichkeitssuche – Standardansatz für RAG." },
+          { pattern: "Semantic Memory", note: "Strukturierte Fakten/Konzepte über Sessions hinweg." },
+        ],
+      },
+      {
+        id: "relationships",
+        question: "Sind die Wissenseinheiten stark vernetzt (Entitäten, Beziehungen)?",
+        yes: "Graph-basiertes Memory bevorzugen – Joins über Hops.",
+        no: "Vector/Semantic reicht – nicht overengineeren.",
+        recommendations: [
+          { pattern: "Graph Memory", note: "Wenn Pfadabfragen oder Hierarchien wichtiger sind als Ähnlichkeit." },
+        ],
+      },
+      {
+        id: "long-history",
+        question: "Wächst die Historie länger als ein Kontextfenster sinnvoll trägt?",
+        yes: "Verdichten oder episodisch ablegen statt blind anhängen.",
+        no: "Working Memory reicht.",
+        recommendations: [
+          { pattern: "Compressed Context Memory", note: "Rolling Summary, wenn Vollständigkeit unnötig ist." },
+          { pattern: "Episodic Memory", note: "Vergangene Tasks/Sessions als Erfahrungs-Snapshots." },
+        ],
+      },
+    ],
   },
 ];
 

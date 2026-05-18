@@ -14,7 +14,10 @@
       "Bash(npx next *)",
       "Bash(npm audit *)",
       "Bash(sed -i '' '4003,4104d' webapp/src/app/globals.css)",
-      "Bash(sed -n '4000,4008p' webapp/src/app/globals.css)"
+      "Bash(sed -n '4000,4008p' webapp/src/app/globals.css)",
+      "mcp__playwright__browser_snapshot",
+      "Bash(echo \"EXIT=$?\")",
+      "mcp__playwright__browser_click"
     ]
   }
 }
