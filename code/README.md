@@ -52,6 +52,23 @@ Unterstützte Provider-Umgebungsvariablen:
 
 `AGENT_PROVIDER=offline` nutzen oder alle Keys leer lassen, um den Fallback-Modus zu verwenden. `AGENT_PROVIDER=gh` wird als Kurzform für `AGENT_PROVIDER=github` akzeptiert.
 
+### GitHub Models in Colab
+
+GitHub oder Colab stellen keinen Model-Token automatisch bereit. Nutzer müssen ihren eigenen Token im Notebook setzen, bevor sie eine Demo mit echtem Modell ausführen. Ohne Token bleibt die CLI bewusst im Offline-Fallback.
+
+Für Nutzer mit GitHub Account ist GitHub Models oft der einfachste Weg, weil der Endpoint OpenAI-kompatibel ist:
+
+```python
+import getpass
+import os
+
+os.environ["AGENT_PROVIDER"] = "github"
+os.environ["GITHUB_TOKEN"] = getpass.getpass("GitHub Token mit Models-Zugriff: ")
+os.environ["GITHUB_MODEL"] = "openai/gpt-4.1-mini"
+```
+
+Der Token braucht Zugriff auf GitHub Models, in der Regel `models:read`. Lokal können dieselben Werte auch in `code/.env` stehen.
+
 ## LangSmith
 
 LangSmith Tracing wird vollständig über Umgebungsvariablen gesteuert:
