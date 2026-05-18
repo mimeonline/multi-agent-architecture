@@ -6,7 +6,9 @@ export default function GovernancePage() {
     <AtlasItemsTemplate
       kicker="Governance"
       title="Risiken, Kontrollen und Nachweise sauber trennen."
-      intro="Governance ist der Control Layer für AI Security, Datenschutz, Regulation, Auditability und Human Oversight."
+      intro="Diese Seite erklärt, wie AI-Systeme kontrollierbar bleiben: Sicherheit, Datenschutz, regulatorische Einordnung, Nachvollziehbarkeit und menschliche Kontrolle."
+      overviewTitle="Fünf Governance-Themen, fünf Kontrollpunkte."
+      overviewIntro="Springe direkt zu dem Risiko oder Kontrollpunkt, den du einordnen möchtest."
       items={governanceItems}
     />
   );

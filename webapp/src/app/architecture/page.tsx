@@ -4,9 +4,11 @@ import { AtlasItemsTemplate } from "@/features/atlas/templates/AtlasItemsTemplat
 export default function ArchitecturePage() {
   return (
     <AtlasItemsTemplate
-      kicker="Architecture"
-      title="Von Agent-Verhalten zu Systemdesign."
-      intro="Architecture Topics beschreiben Boundaries, State, Orchestration, Observability und Cost als produktionsrelevante Designkräfte."
+      kicker="Architektur"
+      title="Systementscheidungen für robuste AI-Anwendungen."
+      intro="Diese Seite erklärt die Architekturthemen, die aus einzelnen AI-Funktionen ein betreibbares System machen: klare Grenzen, Zustand, Ablaufsteuerung, Beobachtbarkeit und Kostenkontrolle."
+      overviewTitle="Fünf Architekturthemen, fünf zentrale Entscheidungen."
+      overviewIntro="Springe direkt zu dem Thema, das für dein System gerade am wichtigsten ist."
       items={architectureItems}
     />
   );
