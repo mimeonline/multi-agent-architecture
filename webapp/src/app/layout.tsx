@@ -1,25 +1,30 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "AI Agent Pattern Landscape",
-  description: "Interaktive Lernwebapp zur AI Agent Pattern Landscape.",
+  title: "AI Systems Atlas",
+  description: "Architecture-first Knowledge Platform für robuste AI-Systeme.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="de">
+    <html lang="de" data-scroll-behavior="smooth">
       <body>
         <header className="site-header">
-          <a className="brand" href="#top" aria-label="AI Agent Pattern Landscape Start">
+          <Link className="brand" href="/" aria-label="AI Systems Atlas Start">
             <span className="brand-mark">A</span>
-            <span>Agent Pattern Landscape</span>
-          </a>
+            <span>AI Systems Atlas</span>
+          </Link>
           <nav className="top-nav" aria-label="Hauptnavigation">
-            <a href="#landscape">Infografik</a>
-            <a href="#lookup">Lookup</a>
-            <a href="#decision">Decision</a>
-            <a href="#demos">Code</a>
+            <Link href="/foundations">Foundations</Link>
+            <Link href="/patterns">Patterns</Link>
+            <Link href="/architecture">Architecture</Link>
+            <Link href="/governance">Governance</Link>
+            <Link href="/decision-guides">Decisions</Link>
+            <Link href="/reference-architectures">References</Link>
+            <Link href="/implementation-lab">Lab</Link>
+            <Link href="/tooling-compatibility">Tooling</Link>
             <a href="https://github.com/mimeonline/multi-agent-architecture" target="_blank" rel="noreferrer">
               GitHub
             </a>
@@ -28,7 +33,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         {children}
         <footer className="site-footer">
           <div className="footer-row">
-            <span>AI Agent Pattern Landscape · Lernreferenz</span>
+            <span>AI Systems Atlas · Architecture-first Knowledge Platform</span>
             <span>
               Quellen:{" "}
               <a

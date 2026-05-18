@@ -1,6 +1,6 @@
 # Webapp
 
-Interaktive Lernwebapp zur AI Agent Pattern Landscape auf Basis von Next.js App Router, Tailwind CSS 4 und shadcn/ui-kompatiblen Primitives.
+Interaktive Lernwebapp für den AI Systems Atlas auf Basis von Next.js App Router, Tailwind CSS 4 und shadcn/ui-kompatiblen Primitives.
 
 ## Start
 
@@ -14,7 +14,8 @@ Next.js startet standardmäßig auf `http://localhost:3000`. Das Dev-Script nutz
 ## Inhalte
 
 - `src/app/`: Next.js App Router Layout und Page
-- `src/features/landscape/`: Pattern-Daten, Types, Organisms und Template
+- `src/features/atlas/`: Atlas-Startseite, kuratierte V1-Inhalte und Produktkomposition
+- `src/features/landscape/`: bestehende Pattern-Daten, Explorer, Decision-Heuristik und Pattern-Detailansichten
 - `src/components/`: featureübergreifende Atomic-Design-Komponenten und shadcn/ui-Primitives
 - `src/lib/`: gemeinsame Utilities, aktuell `cn()` für shadcn/ui
 - `public/`: statische Assets für den isolierten Vercel-Deploy
@@ -22,7 +23,7 @@ Next.js startet standardmäßig auf `http://localhost:3000`. Das Dev-Script nutz
 
 ## Zweck
 
-Die Webapp ist der navigierbare Einstieg in das Projekt. Sie verlinkt Theorie, Infografik, Slides und Code-Demos und macht die Pattern Landscape als Lernoberfläche nutzbar.
+Die Webapp ist der navigierbare Einstieg in den AI Systems Atlas. Die Startseite funktioniert als Landing Page, während Foundations, Patterns, Architecture, Governance, Decision Guides und Reference Architectures eigene Seiten im App Router haben. Der Capability Layer hat eigene Seiten für Implementation Lab und Tooling Compatibility, bleibt aber unterstützend und wird nicht zur Haupttaxonomie.
 
 ## Architektur
 

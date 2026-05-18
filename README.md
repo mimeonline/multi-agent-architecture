@@ -1,18 +1,21 @@
-# AI Agent Pattern Landscape
+# AI Systems Atlas
 
-Ein veröffentlichbares Lern- und Referenzprojekt für moderne AI-Agent-Architektur. Es verbindet Theorie, Infografik, Reveal.js Slides, praktische Code-Demos und eine Webapp zu einem navigierbaren Landscape-Projekt.
+Eine architecture-first Knowledge Platform für robuste AI-Systeme. Das Projekt entwickelt die bestehende AI Agent Pattern Landscape evolutionär zum AI Systems Atlas weiter und verbindet Theorie, Infografik, Reveal.js Slides, praktische Code-Demos und eine Webapp zu einer navigierbaren Architektur-Landkarte.
 
 ## Inhalt
 
+- `docs/ai-systems-atlas-product-architecture.md`: Produkt- und Refactoring-Rahmen für den AI Systems Atlas
 - `docs/ai-agent-pattern-landscape.md`: ausführliches deutsches Referenzmodell mit vier Domänen und zwei Querschnittssichten
 - `docs/ai-agen-pattern-landscape.png`: Infografik zur Pattern Landscape
 - `presentation/`: Reveal.js Präsentation für Talks, Workshops und Veröffentlichungen
 - `code/`: praktische Python-Demos mit LangChain, LangGraph, LangSmith und Deep Agents
-- `webapp/`: interaktive Lernwebapp mit Theorie, Infografik, Slides und Codepfaden
+- `webapp/`: interaktive Atlas-Webapp mit Foundations, Patterns, Architecture, Governance, Decision Guides, Reference Architectures, Implementation Lab und Tooling Compatibility
 
 ## Leitidee
 
-"Pattern" wird in diesem Projekt pragmatisch verstanden: Neben klassischen Patterns werden auch wiederkehrende Capabilities, Integrationsmechanismen und Betriebsbausteine sichtbar gemacht. Ziel ist nicht eine akademisch perfekte Taxonomie, sondern ein nutzbares Referenzmodell für Architekturentscheidungen.
+Der Atlas folgt dem Prinzip: Architecture first. Implementation proves it. Frameworks support it.
+
+"Pattern" wird pragmatisch verstanden: Neben klassischen Patterns werden auch wiederkehrende Capabilities, Integrationsmechanismen und Betriebsbausteine sichtbar gemacht. Ziel ist nicht eine akademisch perfekte Taxonomie, sondern ein nutzbares Referenzmodell für Architekturentscheidungen.
 
 ## Schnellstart
 
@@ -48,7 +51,7 @@ Die Code-Demos sind ENV-basiert vorbereitet. Unterstützt sind je nach installie
 
 ## Veröffentlichungsstruktur
 
-Das Projekt ist so gedacht, dass die Webapp als Einstieg dient, die Slides als Vortragsebene funktionieren und der Code als praktische Werkbank darunterliegt. Die Markdown-Referenz bleibt die ausführliche Quelle für spätere Erweiterungen.
+Das Projekt ist so gedacht, dass die Webapp als Einstieg dient, die Slides als Kommunikationsartefakt funktionieren und der Code als Implementation Lab darunterliegt. Die Markdown-Referenz bleibt die ausführliche Quelle für spätere Erweiterungen.
 
 ## Lizenz
 

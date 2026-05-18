@@ -1,6 +1,5 @@
-import { LandscapeTemplate } from "@/features/landscape/templates/LandscapeTemplate";
+import { AtlasTemplate } from "@/features/atlas/templates/AtlasTemplate";
 
 export default function Page() {
-  return <LandscapeTemplate />;
+  return <AtlasTemplate />;
 }
-
