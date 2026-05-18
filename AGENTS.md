@@ -2,7 +2,7 @@
 
 ## Projektziel
 
-Dieses Repository dokumentiert und demonstriert die AI Agent Pattern Landscape. Änderungen sollen Theorie, Präsentation, Code und Webapp konsistent weiterentwickeln.
+Dieses Repository dokumentiert und demonstriert den AI Systems Atlas als evolutionäre Weiterentwicklung der AI Agent Pattern Landscape. Änderungen sollen Theorie, Präsentation, Code und Webapp konsistent weiterentwickeln.
 
 ## Sprache und Stil
 
@@ -14,11 +14,13 @@ Dieses Repository dokumentiert und demonstriert die AI Agent Pattern Landscape. 
 
 ## Struktur
 
+- `README.md`: Einstieg, Schnellstart und Veröffentlichungsstruktur
+- `docs/ai-systems-atlas-product-architecture.md`: Produkt- und Refactoring-Rahmen für den AI Systems Atlas
 - `docs/ai-agent-pattern-landscape.md`: kanonische Langfassung
 - `docs/ai-agen-pattern-landscape.png`: Infografik, muss in Webapp und Slides verlinkt bleiben
 - `presentation/`: Reveal.js Präsentation
 - `code/`: Python-Demos für LangChain, LangGraph, LangSmith und Deep Agents
-- `webapp/`: Next.js App Router Lernoberfläche
+- `webapp/`: Next.js App Router Lernoberfläche für den Atlas
 
 ## Entwicklungsregeln
 
@@ -28,6 +30,7 @@ Dieses Repository dokumentiert und demonstriert die AI Agent Pattern Landscape. 
 - Framework-Zuordnungen konservativ formulieren, wenn native Unterstützung unklar ist
 - API Keys niemals committen
 - Beispiele sollen ohne API Key hilfreich scheitern oder im Dry-Run-Modus erklärenden Output liefern
+- Keine statische Legacy-Webapp unter `webapp/index.html` oder `webapp/src/app.js` wieder einführen
 
 ## Webapp und Atomic Design
 
@@ -35,6 +38,8 @@ Dieses Repository dokumentiert und demonstriert die AI Agent Pattern Landscape. 
 - Styling basiert auf Tailwind CSS 4, CSS-Variablen und shadcn/ui-kompatiblen Primitives.
 - Seiten liegen in `webapp/src/app` und bleiben orchestration-only: Route lesen, Template rendern, keine Fachlogik.
 - Feature-Code liegt unter `webapp/src/features/<feature>/`.
+- `webapp/src/features/atlas` enthält die Atlas-Startseite, kuratierte Inhalte und Routentemplates.
+- `webapp/src/features/landscape` enthält Pattern-Daten, Explorer, Framework-Mapping und Decision-Heuristik.
 - Atomic Design ist verbindlich:
   - `atoms`: kleinste wiederverwendbare UI-Bausteine ohne Fachlogik
   - `molecules`: zusammengesetzte UI-Elemente mit klarer Eingabe und Ausgabe

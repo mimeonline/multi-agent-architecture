@@ -13,17 +13,18 @@ Next.js startet standardmäßig auf `http://localhost:3000`. Das Dev-Script nutz
 
 ## Inhalte
 
-- `src/app/`: Next.js App Router Layout und Page
+- `src/app/`: Next.js App Router Layout und Routenseiten
 - `src/features/atlas/`: Atlas-Startseite, kuratierte V1-Inhalte und Produktkomposition
 - `src/features/landscape/`: bestehende Pattern-Daten, Explorer, Decision-Heuristik und Pattern-Detailansichten
 - `src/components/`: featureübergreifende Atomic-Design-Komponenten und shadcn/ui-Primitives
 - `src/lib/`: gemeinsame Utilities, aktuell `cn()` für shadcn/ui
 - `public/`: statische Assets für den isolierten Vercel-Deploy
-- `index.html`, `src/app.js`, `src/styles.css`: Legacy-Version der statischen Webapp, bleibt vorerst als Referenz liegen
+
+Die frühere statische Legacy-Webapp wurde entfernt. Einstiegspunkt ist ausschließlich der App Router unter `src/app`.
 
 ## Zweck
 
-Die Webapp ist der navigierbare Einstieg in den AI Systems Atlas. Die Startseite funktioniert als Landing Page, während Foundations, Patterns, Architecture, Governance, Decision Guides und Reference Architectures eigene Seiten im App Router haben. Der Capability Layer hat eigene Seiten für Implementation Lab und Tooling Compatibility, bleibt aber unterstützend und wird nicht zur Haupttaxonomie.
+Die Webapp ist der navigierbare Einstieg in den AI Systems Atlas. Die Startseite rendert das Atlas Template, während Foundations, Patterns, Architecture, Governance, Decision Guides und Reference Architectures eigene Seiten im App Router haben. Der Capability Layer hat eigene Seiten für Implementation Lab und Tooling Compatibility, bleibt aber unterstützend und wird nicht zur Haupttaxonomie.
 
 ## Architektur
 

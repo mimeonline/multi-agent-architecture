@@ -11,6 +11,8 @@ Eine architecture-first Knowledge Platform für robuste AI-Systeme. Das Projekt 
 - `code/`: praktische Python-Demos mit LangChain, LangGraph, LangSmith und Deep Agents
 - `webapp/`: interaktive Atlas-Webapp mit Foundations, Patterns, Architecture, Governance, Decision Guides, Reference Architectures, Implementation Lab und Tooling Compatibility
 
+Die Webapp ist eine reine Next.js App Router Anwendung. Die frühere statische Webapp unter `webapp/index.html` wurde entfernt.
+
 ## Leitidee
 
 Der Atlas folgt dem Prinzip: Architecture first. Implementation proves it. Frameworks support it.
@@ -27,6 +29,7 @@ npm run dev
 
 # Webapp
 cd ../webapp
+npm install
 npm run dev
 
 # Code-Demos

@@ -8,8 +8,9 @@ Das Feature komponiert die neue Atlas-Oberfläche aus kuratierten V1-Inhalten un
 
 ## Struktur
 
-- `lib/`: kuratierte Atlas-Inhalte für Foundations, Architecture, Governance und Reference Architectures
+- `lib/`: kuratierte Atlas-Inhalte für Foundations, Architecture, Governance, Decision Guides, Implementation Lab, Tooling Compatibility und Reference Architectures
+- `molecules/`: kompakte Inhaltslisten für Atlas-Seiten
 - `types/`: schlanke TypeScript-Typen für Atlas Items und Reference Architectures
-- `templates/`: Seitenkomposition der Atlas-Startseite
+- `templates/`: Seitenkompositionen der Atlas-Startseite und der App-Router-Unterseiten
 
 Die bestehende Pattern-Funktionalität bleibt in `features/landscape/` und wird hier nur eingebettet.
