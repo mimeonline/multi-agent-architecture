@@ -42,6 +42,12 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Local browser verification artifacts
+.playwright-mcp/
+playwright-report/
+test-results/
+*-full.png
+
 # Local package manager cache
 .npm-cache/
 **/.npm-cache/
