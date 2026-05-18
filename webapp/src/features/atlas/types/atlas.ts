@@ -87,10 +87,34 @@ export type ImplementationLabGroup = {
 
 export type ToolingCompatibilityLevel = "Native" | "Composable" | "Custom" | "Supporting";
 
+export type ToolingCategory =
+  | "Orchestration"
+  | "Agent Runtime"
+  | "Memory & Retrieval"
+  | "Observability"
+  | "Workflow Runtime"
+  | "Typed Interfaces";
+
+export type ToolingLink = {
+  label: string;
+  href: string;
+};
+
 export type ToolingCompatibility = {
   tool: string;
   level: ToolingCompatibilityLevel;
+  category: ToolingCategory;
+  language: string;
+  license: string;
   bestFor: string;
   watchOut: string;
   related: string[];
+  links: ToolingLink[];
+};
+
+export type FrameworkRow = {
+  framework: string;
+  nativePatterns: string;
+  strength: string;
+  links: ToolingLink[];
 };

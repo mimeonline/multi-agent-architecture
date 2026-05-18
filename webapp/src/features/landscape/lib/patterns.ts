@@ -1899,13 +1899,82 @@ export const decisionGuides: DecisionGuide[] = [
   },
 ];
 
-export const frameworkRows = [
-  ["Anthropic Cookbook", "5 Workflow-Patterns", "Minimal, gut erklärbar"],
-  ["LangGraph", "Supervisor, Swarm, Graph-based", "Kontrollierte Graph-Orchestrierung"],
-  ["CrewAI", "Sequential, Hierarchical Process, Flows", "Rollen und Prozesse"],
-  ["AutoGen / AG2", "GroupChat, Two-Agent-Chat, Nested Chats", "Multi-Agent-Kommunikation"],
-  ["Microsoft Agent Framework", "Sequential, Concurrent, Handoff, Magentic", "Breite Orchestrierung"],
-  ["Google ADK", "Pipeline, Coordinator, Parallel, HITL, Composite", "Breite Pattern-Abdeckung"],
-  ["AWS Strands", "Graph, Swarm, Workflow, Agents-as-Tools", "Agent Runtime und AWS-Integration"],
-  ["OpenAI Agents SDK", "Handoff, Tools, Guardrails", "Nahe Modell- und Tool-Integration"],
+export const frameworkRows: Array<{
+  framework: string;
+  nativePatterns: string;
+  strength: string;
+  links: Array<{ label: string; href: string }>;
+}> = [
+  {
+    framework: "Anthropic Cookbook",
+    nativePatterns: "5 Workflow-Patterns",
+    strength: "Minimal, gut erklärbar",
+    links: [
+      { label: "Building effective agents", href: "https://www.anthropic.com/engineering/building-effective-agents" },
+      { label: "GitHub", href: "https://github.com/anthropics/anthropic-cookbook" },
+    ],
+  },
+  {
+    framework: "LangGraph",
+    nativePatterns: "Supervisor, Swarm, Graph-based",
+    strength: "Kontrollierte Graph-Orchestrierung",
+    links: [
+      { label: "Docs", href: "https://langchain-ai.github.io/langgraph/" },
+      { label: "GitHub", href: "https://github.com/langchain-ai/langgraph" },
+    ],
+  },
+  {
+    framework: "CrewAI",
+    nativePatterns: "Sequential, Hierarchical Process, Flows",
+    strength: "Rollen und Prozesse",
+    links: [
+      { label: "Docs", href: "https://docs.crewai.com/" },
+      { label: "GitHub", href: "https://github.com/crewAIInc/crewAI" },
+    ],
+  },
+  {
+    framework: "AutoGen / AG2",
+    nativePatterns: "GroupChat, Two-Agent-Chat, Nested Chats",
+    strength: "Multi-Agent-Kommunikation",
+    links: [
+      { label: "Docs", href: "https://microsoft.github.io/autogen/" },
+      { label: "GitHub", href: "https://github.com/microsoft/autogen" },
+    ],
+  },
+  {
+    framework: "Microsoft Agent Framework",
+    nativePatterns: "Sequential, Concurrent, Handoff, Magentic",
+    strength: "Breite Orchestrierung",
+    links: [
+      { label: "Docs", href: "https://learn.microsoft.com/en-us/agent-framework/" },
+      { label: "GitHub", href: "https://github.com/microsoft/agent-framework" },
+    ],
+  },
+  {
+    framework: "Google ADK",
+    nativePatterns: "Pipeline, Coordinator, Parallel, HITL, Composite",
+    strength: "Breite Pattern-Abdeckung",
+    links: [
+      { label: "Docs", href: "https://google.github.io/adk-docs/" },
+      { label: "GitHub", href: "https://github.com/google/adk-python" },
+    ],
+  },
+  {
+    framework: "AWS Strands",
+    nativePatterns: "Graph, Swarm, Workflow, Agents-as-Tools",
+    strength: "Agent Runtime und AWS-Integration",
+    links: [
+      { label: "Docs", href: "https://strandsagents.com/" },
+      { label: "GitHub", href: "https://github.com/strands-agents/sdk-python" },
+    ],
+  },
+  {
+    framework: "OpenAI Agents SDK",
+    nativePatterns: "Handoff, Tools, Guardrails",
+    strength: "Nahe Modell- und Tool-Integration",
+    links: [
+      { label: "Docs", href: "https://openai.github.io/openai-agents-python/" },
+      { label: "GitHub", href: "https://github.com/openai/openai-agents-python" },
+    ],
+  },
 ];

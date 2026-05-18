@@ -1449,8 +1449,10 @@ p { line-height: 1.6; }
 }
 
 .lab-card h3,
-.tooling-card h3 {
-  font-size: clamp(1.25rem, 1.8vw, 1.65rem);
+.tooling-card h3,
+.tooling-card h4 {
+  margin: 0;
+  font-size: clamp(1.15rem, 1.6vw, 1.45rem);
 }
 
 .lab-card p,
@@ -1514,6 +1516,207 @@ p { line-height: 1.6; }
   border-color: var(--ink);
 }
 
+.lab-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 26px 0 0;
+}
+
+.lab-summary div {
+  min-width: 150px;
+  padding: 14px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--paper) 82%, transparent);
+}
+
+.lab-summary dt {
+  color: var(--ink);
+  font-size: clamp(1.8rem, 3vw, 2.5rem);
+  font-weight: 850;
+  line-height: 1;
+}
+
+.lab-summary dd {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 750;
+}
+
+.lab-principles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.lab-principles article {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+
+.lab-principles svg {
+  color: var(--ablauf);
+}
+
+.lab-principles h3,
+.lab-demo-group-heading h3,
+.lab-demo-card h4,
+.lab-architecture-card h3 {
+  margin: 0;
+  color: var(--ink);
+}
+
+.lab-principles p,
+.lab-demo-group-heading p,
+.lab-demo-card p,
+.lab-architecture-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.lab-catalog-section {
+  background: var(--paper);
+  border-bottom: 1px solid var(--line);
+}
+
+.lab-demo-group {
+  display: grid;
+  gap: 18px;
+  padding-top: 28px;
+}
+
+.lab-demo-group + .lab-demo-group {
+  margin-top: 34px;
+  border-top: 1px solid var(--line);
+}
+
+.lab-demo-group-heading {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.4fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: end;
+}
+
+.lab-demo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 14px;
+}
+
+.lab-demo-card,
+.lab-architecture-card {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.lab-demo-card-head {
+  display: grid;
+  gap: 8px;
+}
+
+.lab-demo-steps {
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.lab-demo-steps strong {
+  color: var(--ink);
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.lab-demo-steps ol {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 1.1rem;
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.lab-command {
+  margin: 0;
+  padding: 12px 14px;
+  overflow-x: auto;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 10px;
+  background: var(--ink);
+  color: var(--paper);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.lab-demo-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.lab-demo-links a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 34px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.lab-demo-links a:hover {
+  border-color: var(--ablauf);
+}
+
+.lab-demo-links svg {
+  width: 14px;
+  height: 14px;
+  color: var(--ablauf);
+}
+
+.lab-demo-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lab-demo-tags span {
+  display: inline-flex;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 750;
+}
+
+.lab-architecture-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 14px;
+}
+
 .tooling-card-header {
   display: flex;
   justify-content: space-between;
@@ -1546,6 +1749,157 @@ p { line-height: 1.6; }
   background: var(--zusammen);
   color: var(--ink);
 }
+
+/* tooling v2 additions */
+.legend-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.legend-card {
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-left-width: 3px;
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.legend-native { border-left-color: var(--ablauf); }
+.legend-composable { border-left-color: var(--system); }
+.legend-supporting { border-left-color: var(--zusammen); }
+.legend-custom { border-left-color: var(--muted); }
+.legend-level {
+  margin: 0 0 6px;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.legend-native .legend-level { color: var(--ablauf); }
+.legend-composable .legend-level { color: var(--system); }
+.legend-supporting .legend-level { color: var(--zusammen); }
+.legend-custom .legend-level { color: var(--muted); }
+.legend-desc {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.tooling-group {
+  margin-bottom: 32px;
+}
+.tooling-group-title {
+  margin: 0 0 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.tooling-level {
+  display: inline-flex;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  background: var(--ink);
+  color: white;
+}
+.tooling-level-native { background: var(--ablauf); }
+.tooling-level-composable { background: var(--system); }
+.tooling-level-supporting { background: var(--zusammen); color: var(--ink); }
+.tooling-level-custom { background: var(--muted); }
+
+.tooling-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 0.82rem;
+  color: var(--muted);
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.tooling-meta strong {
+  color: var(--ink);
+  font-weight: 700;
+  margin-right: 4px;
+}
+
+.tooling-dl {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+.tooling-section-label {
+  margin: 0 0 6px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.tooling-link-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.tooling-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-decoration: none;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.tooling-link:hover { border-color: var(--ink); transform: translateY(-1px); }
+
+.tooling-disclaimer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  font-size: 0.84rem;
+  color: var(--muted);
+}
+
+.fw-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.fw-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--paper);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+.fw-link:hover { border-color: var(--ink); }
 
 .tooling-card dl {
   display: grid;
@@ -2275,6 +2629,11 @@ p { line-height: 1.6; }
     grid-template-columns: 1fr;
   }
 
+  .lab-principles,
+  .lab-demo-group-heading {
+    grid-template-columns: 1fr;
+  }
+
   .domain-band { grid-template-columns: repeat(2, 1fr); }
   .atlas-domain-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .atlas-item { grid-template-columns: 1fr; }
@@ -2289,6 +2648,8 @@ p { line-height: 1.6; }
   .atlas-domain-grid,
   .capability-row,
   .lab-grid,
+  .lab-demo-grid,
+  .lab-architecture-grid,
   .tooling-grid,
   .reference-columns,
   .answer-grid,
@@ -3800,6 +4161,10 @@ button.rel-link:hover { text-decoration: underline; }
 [data-theme="dark"] .reference-failures li,
 [data-theme="dark"] .reference-diagram li,
 [data-theme="dark"] .detail-when > div { background: var(--surface-2); }
+
+[data-theme="dark"] .legend-card { background: var(--surface-2); }
+[data-theme="dark"] .tooling-link,
+[data-theme="dark"] .fw-link { background: var(--surface-2); }
 
 /* -- Tooling card -- */
 [data-theme="dark"] .tooling-card-header span { background: var(--surface-2); color: var(--ink); }
