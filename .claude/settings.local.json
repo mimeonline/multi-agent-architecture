@@ -5,7 +5,11 @@
       "Bash(curl -s http://localhost:3000/_next/static/chunks/_app-pages-browser_src_app_globals_css.css)",
       "Bash(curl -s http://localhost:3000/)",
       "Bash(python3 -c 'import ast; print\\(ast.get_docstring\\(ast.parse\\(open\\('\\\\''__TRACKED_VAR__'\\\\''\\).read\\(\\)\\)\\)\\)')",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(curl -s http://localhost:3001/foundations)",
+      "Bash(curl -s \"http://localhost:3001/foundations?bust=$\\(date +%s\\)\")",
+      "Bash(curl -s -o /tmp/foundations.html http://localhost:3001/foundations)",
+      "Read(//tmp/**)"
     ]
   }
 }

@@ -11,6 +11,9 @@ export type AtlasItem = {
   title: string;
   type: AtlasItemType;
   summary: string;
+  explanation?: string;
+  projectQuestion?: string;
+  example?: string;
   whyItMatters: string;
   tradeoffs: string;
   failureModes: string[];

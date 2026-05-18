@@ -15,21 +15,22 @@ export function AtlasTemplate() {
     <main id="top">
       <section className="hero atlas-hero lp-hero" aria-labelledby="hero-title">
         <div className="hero-copy">
-          <SectionKicker>AI Systems Architecture</SectionKicker>
+          <SectionKicker>AI-Systemarchitektur</SectionKicker>
           <h1 id="hero-title">
             AI Systems <em>Atlas</em>
           </h1>
           <p className="hero-lead">
-            Architecture-first knowledge platform für robuste AI-Systeme. Lerne, wie
-            Foundations, Patterns, Systemdesign und Governance zusammen robuste AI-Systeme formen.
+            Eine verständliche Landkarte für robuste AI-Systeme. Der Atlas zeigt, welche
+            Grundlagen, Lösungsmuster, Architekturentscheidungen und Kontrollmechanismen
+            zusammengehören.
           </p>
           <div className="hero-actions" aria-label="Schnellzugriff">
             <a className="btn btn-primary" href="/foundations">
               <BookOpen aria-hidden="true" />
-              Start with Foundations
+              Mit Grundlagen starten
             </a>
             <a className="btn btn-secondary" href="/patterns">
-              Pattern Landscape
+              Lösungsmuster ansehen
               <ArrowRight aria-hidden="true" />
             </a>
             <a
@@ -57,9 +58,9 @@ export function AtlasTemplate() {
         <div className="hero-visual" aria-hidden="true">
           <div className="constellation atlas-constellation">
             <div className="core">Atlas</div>
-            <div className="node denken">Foundations</div>
-            <div className="node ablauf">Patterns</div>
-            <div className="node zusammen">Architecture</div>
+            <div className="node denken">Grundlagen</div>
+            <div className="node ablauf">Muster</div>
+            <div className="node zusammen">Architektur</div>
             <div className="node system">Governance</div>
           </div>
         </div>
@@ -67,11 +68,12 @@ export function AtlasTemplate() {
 
       <section id="atlas-map" className="section atlas-overview" aria-labelledby="atlas-map-title">
         <div className="section-heading">
-          <SectionKicker>Produktmodell</SectionKicker>
-          <h2 id="atlas-map-title">Eine Landkarte, kein Framework-Verzeichnis.</h2>
+          <SectionKicker>Überblick</SectionKicker>
+          <h2 id="atlas-map-title">Was du im Atlas findest.</h2>
           <p>
-            Die Startseite führt in die Wissensdomänen. Jede Domain hat eine eigene Seite, während
-            Tooling und Implementation Lab unterstützende Capabilities bleiben.
+            Die Startseite führt in die wichtigsten Bereiche. Jeder Bereich erklärt eine andere
+            Frage: Was muss ich verstehen, welche Lösungsmuster gibt es, wie entwerfe ich das
+            System und wie kontrolliere ich Risiken?
           </p>
         </div>
         <div className="atlas-domain-grid">
@@ -96,8 +98,8 @@ export function AtlasTemplate() {
           <SectionKicker>So funktioniert der Atlas</SectionKicker>
           <h2 id="how-title">Von Bausteinen zu betriebsfähigen AI-Systemen.</h2>
           <p>
-            Vier Etappen, die du in der Reihenfolge nutzen kannst, die zu deinem System passt — als
-            Lernweg, als Review-Checkliste oder als Vokabular im Architektur-Workshop.
+            Du kannst den Atlas als Lernweg, als Checkliste für ein bestehendes System oder als
+            gemeinsame Sprache im Architekturgespräch nutzen.
           </p>
         </div>
         <ol className="lp-steps">
@@ -124,10 +126,11 @@ export function AtlasTemplate() {
       <section className="section lp-personas" aria-labelledby="personas-title">
         <div className="section-heading">
           <SectionKicker>Für wen</SectionKicker>
-          <h2 id="personas-title">Geschrieben für die Rollen, die AI-Systeme tragen.</h2>
+          <h2 id="personas-title">Für alle, die AI-Systeme entwerfen oder verantworten.</h2>
           <p>
-            Der Atlas richtet sich an alle, die AI-Systeme nicht nur ausprobieren, sondern bewusst
-            entwerfen, betreiben und verantworten.
+            Der Atlas richtet sich an Menschen, die über Prototypen hinausdenken und verstehen
+            wollen, welche Entscheidungen ein AI-System robust, nachvollziehbar und betreibbar
+            machen.
           </p>
         </div>
         <div className="lp-persona-grid">
@@ -149,21 +152,21 @@ export function AtlasTemplate() {
       <section className="section lp-principle" aria-labelledby="principle-title">
         <div>
           <SectionKicker>Prinzip</SectionKicker>
-          <h2 id="principle-title">Architecture first. Implementation proves it. Frameworks support it.</h2>
+          <h2 id="principle-title">Erst die Architektur, dann die Implementierung.</h2>
         </div>
         <p>
-          Der Atlas erklärt AI-Systeme über Architekturentscheidungen. Code-Demos und Frameworks
-          sind wichtig, aber sie bleiben Belege und Werkzeuge, nicht die primäre Taxonomie.
+          Der Atlas erklärt AI-Systeme über Entscheidungen, nicht über einzelne Tools. Code-Demos
+          und Frameworks sind wichtig, aber sie dienen als Beispiele und Werkzeuge.
         </p>
       </section>
 
       <section className="section demos lp-capabilities" aria-labelledby="capability-title">
         <div className="section-heading">
-          <SectionKicker>Capabilities</SectionKicker>
-          <h2 id="capability-title">Praktisch, ohne zum Tool-Katalog zu werden.</h2>
+          <SectionKicker>Praxisbezug</SectionKicker>
+          <h2 id="capability-title">Beispiele und Werkzeuge bleiben eingeordnet.</h2>
           <p>
-            Die bestehende Pattern-App, das Implementation Lab und das Framework-Mapping bleiben
-            erhalten, aber sie ordnen sich der Atlas-Perspektive unter.
+            Die Pattern-Übersicht, die Python-Demos und die Werkzeugvergleiche zeigen, wie die
+            Konzepte praktisch aussehen. Sie ersetzen aber nicht die Architekturentscheidung.
           </p>
         </div>
         <div className="capability-row">
@@ -198,8 +201,8 @@ export function AtlasTemplate() {
           <SectionKicker>FAQ</SectionKicker>
           <h2 id="faq-title">Häufige Fragen zum Atlas.</h2>
           <p>
-            Kurze Antworten auf die Fragen, die uns am häufigsten begegnen — von Scope und
-            Zielgruppe bis zur Rolle der Code-Demos.
+            Kurze Antworten auf die häufigsten Fragen: Wofür ist der Atlas gedacht, wie steigt
+            man ein und welche Rolle spielen Code-Demos?
           </p>
         </div>
         <div className="lp-faq-list">
@@ -220,19 +223,19 @@ export function AtlasTemplate() {
           <SectionKicker>Loslegen</SectionKicker>
           <h2 id="cta-title">
             Bereit für robuste AI-Systeme?
-            <em> Starte mit Foundations.</em>
+            <em> Starte mit den Grundlagen.</em>
           </h2>
           <p>
-            Jede Reise durch den Atlas beginnt bei den Bausteinen. Von dort aus führst du den Weg
-            über Patterns, Architecture und Governance bis zu deinen Reference Architectures.
+            Beginne bei den Bausteinen. Von dort aus kommst du zu Lösungsmustern,
+            Architekturentscheidungen, Governance und konkreten Referenzarchitekturen.
           </p>
           <div className="lp-cta-actions">
             <a className="btn btn-primary" href="/foundations">
               <Sparkles aria-hidden="true" />
-              Start with Foundations
+              Mit Grundlagen starten
             </a>
             <a className="btn btn-secondary" href="/reference-architectures">
-              Reference Architectures
+              Referenzarchitekturen
               <ArrowRight aria-hidden="true" />
             </a>
             <a
