@@ -452,7 +452,7 @@ p { line-height: 1.6; }
 
 .foundations-index a {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto auto 1fr;
   align-items: center;
   gap: 14px;
   padding: 14px 18px;
@@ -3096,13 +3096,6 @@ button.rel-link:hover { text-decoration: underline; }
   --diag-bg: rgba(255, 255, 255, 0.08) !important;
   --diag-edge: rgba(226, 232, 240, 0.55) !important;
 }
-[data-theme="dark"] .pattern-diagram text {
-  /* Ensure all label text remains readable on dark surface and on the
-     muted node fills. Outline nodes use currentColor via var(--ink),
-     which is already light in dark mode — so we just brighten the
-     edge labels (currently var(--muted) ≈ #b7c4d4) which is fine.
-     For SOLID nodes the fg is forced to white in DOMAIN_COLORS, also fine. */
-}
 [data-theme="dark"] .pattern-diagram figcaption { color: var(--muted-2); }
 
 /* -- Chips & badges -- */
@@ -3780,10 +3773,6 @@ kbd {
 .code-panel.shiki-panel pre.shiki span {
   background-color: transparent !important;
 }
-.code-panel.shiki-panel::before,
-.code-panel.shiki-panel::after {
-  /* keep window dots + label */
-}
 
 /* ============== PATTERN CARD GRID ============== */
 .pattern-grid {
@@ -3880,6 +3869,7 @@ kbd {
   color: var(--muted);
   display: -webkit-box;
   -webkit-line-clamp: 3;
+  line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -4108,3 +4098,265 @@ kbd {
 [data-theme="dark"] .compare-diff-list li[data-state="exclusive"] {
   background: rgba(249, 115, 22, 0.18);
 }
+
+/* ============== FOUNDATION CARDS ============== */
+.foundation-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
+  gap: 18px;
+}
+@media (max-width: 720px) {
+  .foundation-grid { grid-template-columns: 1fr; }
+}
+
+.foundation-card {
+  position: relative;
+  display: grid;
+  gap: 18px;
+  padding: clamp(20px, 2.5vw, 28px);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--paper);
+  overflow: hidden;
+  scroll-margin-top: 80px;
+  transition: box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.foundation-card:hover {
+  box-shadow: var(--shadow);
+  border-color: var(--accent-color, var(--ablauf));
+}
+.foundation-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--accent-color, var(--ablauf));
+  opacity: 0.85;
+}
+.foundation-card[data-accent="denken"] { --accent-color: var(--denken); --accent-soft: var(--denken-soft); }
+.foundation-card[data-accent="ablauf"] { --accent-color: var(--ablauf); --accent-soft: var(--ablauf-soft); }
+.foundation-card[data-accent="zusammen"] { --accent-color: var(--zusammen); --accent-soft: var(--zusammen-soft); }
+.foundation-card[data-accent="system"] { --accent-color: var(--system); --accent-soft: var(--system-soft); }
+
+.foundation-card-head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.foundation-card-marker {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: var(--accent-soft, var(--surface));
+  color: var(--accent-color, var(--ablauf));
+}
+.foundation-card-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--accent-color, var(--ablauf));
+  box-shadow: 0 2px 6px rgba(11, 14, 20, 0.06);
+}
+.foundation-card-number {
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: var(--accent-color);
+  font-variant-numeric: tabular-nums;
+}
+
+.foundation-card-titles { display: grid; gap: 4px; min-width: 0; }
+.foundation-card-tag {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-color, var(--muted));
+}
+.foundation-card-titles h3 {
+  margin: 0;
+  font-size: clamp(1.3rem, 2.2vw, 1.65rem);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.foundation-card-summary {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.98rem;
+  line-height: 1.55;
+}
+
+.foundation-card-block {
+  display: grid;
+  gap: 6px;
+}
+.foundation-card-block header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.foundation-card-block header svg { color: var(--accent-color, var(--muted)); }
+.foundation-card-block p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.94rem;
+  line-height: 1.6;
+}
+.foundation-card-block.explanation p { color: var(--ink); }
+
+.foundation-card-quote {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent-color, var(--ablauf)) 8%, var(--paper));
+  border-left: 3px solid var(--accent-color, var(--ablauf));
+}
+.foundation-card-quote > svg {
+  color: var(--accent-color, var(--ablauf));
+  opacity: 0.55;
+  margin-top: 2px;
+}
+.foundation-card-quote-label {
+  display: inline-block;
+  margin-bottom: 4px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-color, var(--muted));
+}
+.foundation-card-quote p {
+  margin: 0;
+  font-size: 1rem;
+  line-height: 1.55;
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.foundation-card-block.example {
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px dashed color-mix(in srgb, var(--accent-color) 35%, var(--line));
+  background: color-mix(in srgb, var(--accent-color) 4%, var(--surface));
+}
+.foundation-card-block.example p { font-style: italic; color: var(--ink); }
+
+.foundation-card-twocol {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+@media (max-width: 540px) {
+  .foundation-card-twocol { grid-template-columns: 1fr; gap: 12px; }
+}
+
+.foundation-card-fails header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+.foundation-card-fails header svg { color: #d97706; }
+.foundation-card-fails ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.foundation-card-fails li {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 11px;
+  border-radius: 999px;
+  background: rgba(217, 119, 6, 0.10);
+  color: #b45309;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid rgba(217, 119, 6, 0.22);
+}
+
+.foundation-card-related {
+  display: grid;
+  gap: 8px;
+  padding-top: 4px;
+}
+.foundation-card-related-label {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.foundation-card-related > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.foundation-card-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+/* Index list — small accent enhancements */
+.foundations-index li[data-accent="denken"] a { --idx-color: var(--denken); }
+.foundations-index li[data-accent="ablauf"] a { --idx-color: var(--ablauf); }
+.foundations-index li[data-accent="zusammen"] a { --idx-color: var(--zusammen); }
+.foundations-index li[data-accent="system"] a { --idx-color: var(--system); }
+.foundations-index a:hover { border-color: var(--idx-color, var(--ink)); }
+.foundations-index-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--idx-color, var(--muted));
+  margin-right: 10px;
+}
+
+[data-theme="dark"] .foundation-card { background: rgba(255, 255, 255, 0.03); }
+[data-theme="dark"] .foundation-card-icon { background: rgba(255, 255, 255, 0.08); }
+[data-theme="dark"] .foundation-card-chip { background: rgba(255, 255, 255, 0.04); }
+[data-theme="dark"] .foundation-card-fails li {
+  background: rgba(251, 191, 36, 0.10);
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.25);
+}
+[data-theme="dark"] .foundation-card-fails header svg { color: #fbbf24; }

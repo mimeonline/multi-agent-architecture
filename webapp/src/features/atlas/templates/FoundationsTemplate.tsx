@@ -1,3 +1,19 @@
+import {
+  AlertTriangle,
+  CheckSquare,
+  Database,
+  FileCode2,
+  HelpCircle,
+  Layers,
+  Lightbulb,
+  MessageSquare,
+  Quote,
+  Scale,
+  Sparkles,
+  Target,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react";
 import { SectionKicker } from "@/components/atoms/SectionKicker";
 import { foundationItems } from "../lib/atlas-content";
 
@@ -8,6 +24,21 @@ const SLUGS: Record<string, string> = {
   "Structured Outputs": "structured-outputs",
   Memory: "memory",
   Evaluation: "evaluation",
+};
+
+type FoundationVisual = {
+  icon: LucideIcon;
+  /** which domain color token to derive the accent from */
+  accent: "denken" | "ablauf" | "zusammen" | "system";
+};
+
+const VISUALS: Record<string, FoundationVisual> = {
+  LLMs: { icon: Sparkles, accent: "denken" },
+  "Context Windows": { icon: Layers, accent: "ablauf" },
+  "Tool Calling": { icon: Wrench, accent: "zusammen" },
+  "Structured Outputs": { icon: FileCode2, accent: "system" },
+  Memory: { icon: Database, accent: "ablauf" },
+  Evaluation: { icon: CheckSquare, accent: "denken" },
 };
 
 function slugFor(title: string) {
@@ -35,25 +66,30 @@ export function FoundationsTemplate() {
         <div className="section-heading">
           <SectionKicker>Übersicht</SectionKicker>
           <h2 id="foundations-index-title">Sechs Bausteine, sechs wichtige Entscheidungen.</h2>
-          <p>
-            Springe direkt zu dem Thema, das du verstehen oder einordnen möchtest.
-          </p>
+          <p>Springe direkt zu dem Thema, das du verstehen oder einordnen möchtest.</p>
         </div>
         <nav className="foundations-index" aria-label="Grundlagenübersicht">
           <ol>
-            {foundationItems.map((item, index) => (
-              <li key={item.title}>
-                <a href={`#${slugFor(item.title)}`}>
-                  <span className="foundations-index-number">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <span className="foundations-index-body">
-                    <strong>{item.title}</strong>
-                    <span>{item.tag}</span>
-                  </span>
-                </a>
-              </li>
-            ))}
+            {foundationItems.map((item, index) => {
+              const visual = VISUALS[item.title];
+              const Icon = visual?.icon ?? MessageSquare;
+              return (
+                <li key={item.title} data-accent={visual?.accent}>
+                  <a href={`#${slugFor(item.title)}`}>
+                    <span className="foundations-index-number">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <span className="foundations-index-icon" aria-hidden="true">
+                      <Icon size={16} />
+                    </span>
+                    <span className="foundations-index-body">
+                      <strong>{item.title}</strong>
+                      <span>{item.tag}</span>
+                    </span>
+                  </a>
+                </li>
+              );
+            })}
           </ol>
         </nav>
       </section>
@@ -73,67 +109,105 @@ export function FoundationsTemplate() {
             häufig auftreten.
           </p>
         </div>
-        <div className="atlas-item-list">
-          {foundationItems.map((item) => (
-            <article
-              className="atlas-item"
-              id={slugFor(item.title)}
-              key={item.title}
-            >
-              <div className="atlas-item-meta">
-                <span>Grundlage</span>
-                <strong>{item.tag}</strong>
-              </div>
-              <div className="atlas-item-body">
-                <h3>{item.title}</h3>
-                <p>{item.summary}</p>
-                <dl>
-                  {item.explanation ? (
-                    <div>
-                      <dt>Was ist das?</dt>
-                      <dd>{item.explanation}</dd>
-                    </div>
-                  ) : null}
-                  {item.projectQuestion ? (
-                    <div>
-                      <dt>Projektfrage</dt>
-                      <dd>{item.projectQuestion}</dd>
-                    </div>
-                  ) : null}
-                  {item.example ? (
-                    <div>
-                      <dt>Beispiel</dt>
-                      <dd>{item.example}</dd>
-                    </div>
-                  ) : null}
-                  <div>
-                    <dt>Architekturwert</dt>
-                    <dd>{item.whyItMatters}</dd>
+        <div className="foundation-grid">
+          {foundationItems.map((item, index) => {
+            const visual = VISUALS[item.title];
+            const Icon = visual?.icon ?? MessageSquare;
+            return (
+              <article
+                className="foundation-card"
+                data-accent={visual?.accent ?? "ablauf"}
+                id={slugFor(item.title)}
+                key={item.title}
+              >
+                <header className="foundation-card-head">
+                  <div className="foundation-card-marker" aria-hidden="true">
+                    <span className="foundation-card-icon">
+                      <Icon size={22} />
+                    </span>
+                    <span className="foundation-card-number">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
                   </div>
-                  <div>
-                    <dt>Abwägung</dt>
-                    <dd>{item.tradeoffs}</dd>
+                  <div className="foundation-card-titles">
+                    <span className="foundation-card-tag">{item.tag}</span>
+                    <h3>{item.title}</h3>
+                    <p className="foundation-card-summary">{item.summary}</p>
                   </div>
-                </dl>
-              </div>
-              <div className="atlas-item-side">
-                <p>Typische Fehler</p>
-                <ul>
-                  {item.failureModes.map((mode) => (
-                    <li key={mode}>{mode}</li>
-                  ))}
-                </ul>
-                <div
-                  className="atlas-related"
-                  aria-label={`${item.title} Beziehungen`}
-                >
-                  {item.related.map((entry) => (
-                    <span key={entry}>{entry}</span>
-                  ))}
+                </header>
+
+                {item.explanation && (
+                  <section className="foundation-card-block explanation">
+                    <header>
+                      <HelpCircle size={14} aria-hidden="true" />
+                      <span>Was ist das?</span>
+                    </header>
+                    <p>{item.explanation}</p>
+                  </section>
+                )}
+
+                {item.projectQuestion && (
+                  <aside className="foundation-card-quote" aria-label="Projektfrage">
+                    <Quote size={20} aria-hidden="true" />
+                    <div>
+                      <span className="foundation-card-quote-label">Projektfrage</span>
+                      <p>{item.projectQuestion}</p>
+                    </div>
+                  </aside>
+                )}
+
+                {item.example && (
+                  <section className="foundation-card-block example">
+                    <header>
+                      <Lightbulb size={14} aria-hidden="true" />
+                      <span>Beispiel</span>
+                    </header>
+                    <p>{item.example}</p>
+                  </section>
+                )}
+
+                <div className="foundation-card-twocol">
+                  <section className="foundation-card-block value">
+                    <header>
+                      <Target size={14} aria-hidden="true" />
+                      <span>Architekturwert</span>
+                    </header>
+                    <p>{item.whyItMatters}</p>
+                  </section>
+                  <section className="foundation-card-block tradeoff">
+                    <header>
+                      <Scale size={14} aria-hidden="true" />
+                      <span>Abwägung</span>
+                    </header>
+                    <p>{item.tradeoffs}</p>
+                  </section>
                 </div>
-              </div>
-            </article>
-          ))}
+
+                <section className="foundation-card-fails">
+                  <header>
+                    <AlertTriangle size={14} aria-hidden="true" />
+                    <span>Typische Fehler</span>
+                  </header>
+                  <ul>
+                    {item.failureModes.map((mode) => (
+                      <li key={mode}>{mode}</li>
+                    ))}
+                  </ul>
+                </section>
+
+                <footer className="foundation-card-related" aria-label="Verwandte Themen">
+                  <span className="foundation-card-related-label">Verwandt</span>
+                  <div>
+                    {item.related.map((entry) => (
+                      <span key={entry} className="foundation-card-chip">
+                        {entry}
+                      </span>
+                    ))}
+                  </div>
+                </footer>
+              </article>
+            );
+          })}
         </div>
       </section>
 
