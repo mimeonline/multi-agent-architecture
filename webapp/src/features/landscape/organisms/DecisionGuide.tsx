@@ -3,18 +3,11 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, Info, RotateCcw, Share2, X } from "lucide-react";
-import { allPatterns, decisionGuides } from "../lib/patterns";
+import { decisionGuides } from "../lib/patterns";
 import type { DecisionGuide as DecisionGuideDef } from "../types/pattern";
+import { PatternQuickViewLink } from "./PatternQuickView";
 
 type Answer = "yes" | "no";
-
-const KNOWN_PATTERN_NAMES = new Set(allPatterns.map((p) => p.name));
-
-function patternHref(name: string): string | null {
-  return KNOWN_PATTERN_NAMES.has(name)
-    ? `/patterns?p=${encodeURIComponent(name)}`
-    : null;
-}
 
 function encodeAnswers(answers: Array<Answer | null>): string {
   return answers
@@ -237,23 +230,16 @@ export function DecisionGuide() {
             </button>
           </div>
 
-          <p className="recommendation-label">Typische Kandidaten bei „Ja"</p>
+          <p className="recommendation-label">Typische Kandidaten bei „Ja“</p>
           <ul className="recommendations-rich">
-            {currentStep.recommendations.map((rec) => {
-              const href = patternHref(rec.pattern);
-              return (
-                <li key={rec.pattern}>
-                  {href ? (
-                    <Link className="rec-pattern" href={href}>
-                      {rec.pattern}
-                    </Link>
-                  ) : (
-                    <span className="rec-pattern is-unlinked">{rec.pattern}</span>
-                  )}
-                  <span className="rec-note">{rec.note}</span>
-                </li>
-              );
-            })}
+            {currentStep.recommendations.map((rec) => (
+              <li key={rec.pattern}>
+                <PatternQuickViewLink className="rec-pattern" name={rec.pattern}>
+                  {rec.pattern}
+                </PatternQuickViewLink>
+                <span className="rec-note">{rec.note}</span>
+              </li>
+            ))}
           </ul>
 
           <div className="decision-nav">
@@ -281,31 +267,24 @@ export function DecisionGuide() {
 
           {collected.length === 0 ? (
             <p className="summary-empty">
-              Keine „Ja"-Antworten – das deutet auf ein bewusst einfaches Setup. Direkter
+              Keine „Ja“-Antworten, das deutet auf ein bewusst einfaches Setup. Direkter
               Modell-Call oder ein schlanker Prototyp ist hier oft das richtige.
             </p>
           ) : (
             <>
               <p className="recommendation-label">Engere Auswahl</p>
               <ul className="summary-list">
-                {collected.map((rec) => {
-                  const href = patternHref(rec.pattern);
-                  return (
-                    <li key={rec.pattern}>
-                      <div className="summary-pattern">
-                        {href ? (
-                          <Link href={href}>{rec.pattern}</Link>
-                        ) : (
-                          <span>{rec.pattern}</span>
-                        )}
-                        <span className="summary-trigger" title={rec.question}>
-                          aus Frage {guide.steps.findIndex((s) => s.id === rec.stepId) + 1}
-                        </span>
-                      </div>
-                      <p className="summary-note">{rec.note}</p>
-                    </li>
-                  );
-                })}
+                {collected.map((rec) => (
+                  <li key={rec.pattern}>
+                    <div className="summary-pattern">
+                      <PatternQuickViewLink name={rec.pattern}>{rec.pattern}</PatternQuickViewLink>
+                      <span className="summary-trigger" title={rec.question}>
+                        aus Frage {guide.steps.findIndex((s) => s.id === rec.stepId) + 1}
+                      </span>
+                    </div>
+                    <p className="summary-note">{rec.note}</p>
+                  </li>
+                ))}
               </ul>
             </>
           )}

@@ -20,15 +20,13 @@ import {
   implementationNotebookCount,
 } from "../lib/implementation-lab-catalog";
 import type { ImplementationDemoGroupId } from "../lib/implementation-lab-catalog";
-import { allPatterns } from "@/features/landscape/lib/patterns";
+import {
+  PatternQuickViewLink,
+  PatternQuickViewProvider,
+} from "@/features/landscape/organisms/PatternQuickView";
 
 const REPO_CODE_URL = "https://github.com/mimeonline/multi-agent-architecture/tree/main/code";
 const REPO_README_URL = "https://github.com/mimeonline/multi-agent-architecture/blob/main/code/README.md";
-
-const KNOWN_PATTERNS = new Set(allPatterns.map((p) => p.name));
-function patternHref(name: string): string | null {
-  return KNOWN_PATTERNS.has(name) ? `/patterns?p=${encodeURIComponent(name)}` : null;
-}
 
 type DomainFilter = "Alle" | ImplementationDemoGroupId;
 
@@ -41,30 +39,31 @@ export function ImplementationLabTemplate() {
   }, [domain]);
 
   return (
-    <main id="top">
-      <section className="page-hero" aria-labelledby="page-title">
-        <SectionKicker>Implementation Lab</SectionKicker>
-        <h1 id="page-title">Code, Notebooks und Demos für alle Patterns.</h1>
-        <p>
-          Die praktische Werkbank des Atlas. Jede Pattern-Demo erreichbar als Quellcode,
-          Jupyter-Notebook und CLI-Befehl. Python ist die ausführbare Wahrheit, Notebooks der
-          Lernpfad, der Atlas verbindet beides.
-        </p>
-        <dl className="lab-summary" aria-label="Implementation Lab Umfang">
-          <div>
-            <dt>{implementationDemoCount}</dt>
-            <dd>Pattern-Demos</dd>
-          </div>
-          <div>
-            <dt>{implementationArchitectureNotebooks.length}</dt>
-            <dd>Architektur-Notebooks</dd>
-          </div>
-          <div>
-            <dt>{implementationNotebookCount}</dt>
-            <dd>Notebooks gesamt</dd>
-          </div>
-        </dl>
-      </section>
+    <PatternQuickViewProvider>
+      <main id="top">
+        <section className="page-hero" aria-labelledby="page-title">
+          <SectionKicker>Implementation Lab</SectionKicker>
+          <h1 id="page-title">Code, Notebooks und Demos für alle Patterns.</h1>
+          <p>
+            Die praktische Werkbank des Atlas. Jede Pattern-Demo erreichbar als Quellcode,
+            Jupyter-Notebook und CLI-Befehl. Python ist die ausführbare Wahrheit, Notebooks der
+            Lernpfad, der Atlas verbindet beides.
+          </p>
+          <dl className="lab-summary" aria-label="Implementation Lab Umfang">
+            <div>
+              <dt>{implementationDemoCount}</dt>
+              <dd>Pattern-Demos</dd>
+            </div>
+            <div>
+              <dt>{implementationArchitectureNotebooks.length}</dt>
+              <dd>Architektur-Notebooks</dd>
+            </div>
+            <div>
+              <dt>{implementationNotebookCount}</dt>
+              <dd>Notebooks gesamt</dd>
+            </div>
+          </dl>
+        </section>
 
       <section className="section lab-section" aria-labelledby="lab-model-title">
         <div className="atlas-section-heading">
@@ -213,7 +212,6 @@ agent-patterns run all`}</code></pre>
                 </div>
                 <div className="lab-demo-grid">
                   {demos.map((demo) => {
-                    const pHref = patternHref(demo.name);
                     return (
                       <article className={`lab-demo-card domain-${demo.group}`} key={demo.slug}>
                         <header className="lab-demo-card-head">
@@ -256,11 +254,9 @@ agent-patterns run all`}</code></pre>
                           >
                             <Code2 size={13} aria-hidden /> Code
                           </a>
-                          {pHref && (
-                            <Link className="lab-link" href={pHref}>
+                          <PatternQuickViewLink className="lab-link" name={demo.name}>
                               <Layers size={13} aria-hidden /> Pattern
-                            </Link>
-                          )}
+                          </PatternQuickViewLink>
                         </div>
 
                         {demo.frameworks.length > 0 && (
@@ -317,6 +313,7 @@ agent-patterns run all`}</code></pre>
           ))}
         </div>
       </section>
-    </main>
+      </main>
+    </PatternQuickViewProvider>
   );
 }

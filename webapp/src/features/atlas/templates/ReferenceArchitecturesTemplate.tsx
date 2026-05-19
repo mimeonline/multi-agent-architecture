@@ -15,15 +15,10 @@ import {
 import { SectionKicker } from "@/components/atoms/SectionKicker";
 import { referenceArchitectures } from "../lib/atlas-content";
 import type { ReferenceArchitecture } from "../types/atlas";
-import { allPatterns } from "@/features/landscape/lib/patterns";
-
-const KNOWN_PATTERNS = new Set(allPatterns.map((p) => p.name));
-
-function patternHref(name: string): string | null {
-  return KNOWN_PATTERNS.has(name)
-    ? `/patterns?p=${encodeURIComponent(name)}`
-    : null;
-}
+import {
+  PatternQuickViewLink,
+  PatternQuickViewProvider,
+} from "@/features/landscape/organisms/PatternQuickView";
 
 type ComplexityFilter = "Alle" | ReferenceArchitecture["complexity"];
 type AutonomyFilter = "Alle" | ReferenceArchitecture["autonomy"];
@@ -44,7 +39,8 @@ export function ReferenceArchitecturesTemplate() {
   }, [complexity, autonomy]);
 
   return (
-    <main id="top">
+    <PatternQuickViewProvider>
+      <main id="top">
       <section className="page-hero" aria-labelledby="page-title">
         <SectionKicker>Reference Architectures</SectionKicker>
         <h1 id="page-title">Konkrete Systemkompositionen als Applied Views.</h1>
@@ -143,7 +139,8 @@ export function ReferenceArchitecturesTemplate() {
           </Link>
         </div>
       </section>
-    </main>
+      </main>
+    </PatternQuickViewProvider>
   );
 }
 
@@ -208,18 +205,11 @@ function ArchitectureDetail({ arch }: { arch: ReferenceArchitecture }) {
           <div className="detail-block">
             <h3><Workflow size={16} aria-hidden /> Pattern-Komposition</h3>
             <div className="pattern-chip-row">
-              {arch.patternComposition.map((p) => {
-                const href = patternHref(p);
-                return href ? (
-                  <Link key={p} className="pattern-chip" href={href}>
+              {arch.patternComposition.map((p) => (
+                <PatternQuickViewLink key={p} className="pattern-chip" name={p}>
                     {p}
-                  </Link>
-                ) : (
-                  <span key={p} className="pattern-chip is-unlinked">
-                    {p}
-                  </span>
-                );
-              })}
+                </PatternQuickViewLink>
+              ))}
             </div>
           </div>
 

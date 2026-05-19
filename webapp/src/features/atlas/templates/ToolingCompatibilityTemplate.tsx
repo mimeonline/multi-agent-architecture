@@ -1,18 +1,15 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ExternalLink, Info } from "lucide-react";
 import { SectionKicker } from "@/components/atoms/SectionKicker";
 import { FrameworkTable } from "@/features/landscape/organisms/FrameworkTable";
+import {
+  PatternQuickViewLink,
+  PatternQuickViewProvider,
+} from "@/features/landscape/organisms/PatternQuickView";
 import { toolingCompatibility } from "../lib/atlas-content";
 import type { ToolingCategory, ToolingCompatibilityLevel } from "../types/atlas";
-import { allPatterns } from "@/features/landscape/lib/patterns";
-
-const KNOWN_PATTERNS = new Set(allPatterns.map((p) => p.name));
-function patternHref(name: string): string | null {
-  return KNOWN_PATTERNS.has(name) ? `/patterns?p=${encodeURIComponent(name)}` : null;
-}
 
 type LevelFilter = "Alle" | ToolingCompatibilityLevel;
 type CategoryFilter = "Alle" | ToolingCategory;
@@ -63,7 +60,8 @@ export function ToolingCompatibilityTemplate() {
   const categories: CategoryFilter[] = ["Alle", ...CATEGORY_ORDER];
 
   return (
-    <main id="top">
+    <PatternQuickViewProvider>
+      <main id="top">
       <section className="page-hero" aria-labelledby="page-title">
         <SectionKicker>Tooling Compatibility</SectionKicker>
         <h1 id="page-title">Werkzeuge nach Architekturfit, nicht nach Hype.</h1>
@@ -156,18 +154,11 @@ export function ToolingCompatibilityTemplate() {
                     <div className="tooling-patterns" aria-label={`Verwandte Patterns für ${entry.tool}`}>
                       <p className="tooling-section-label">Patterns</p>
                       <div className="pattern-chip-row">
-                        {entry.related.map((p) => {
-                          const href = patternHref(p);
-                          return href ? (
-                            <Link key={p} href={href} className="pattern-chip">
+                        {entry.related.map((p) => (
+                          <PatternQuickViewLink key={p} name={p} className="pattern-chip">
                               {p}
-                            </Link>
-                          ) : (
-                            <span key={p} className="pattern-chip is-unlinked">
-                              {p}
-                            </span>
-                          );
-                        })}
+                          </PatternQuickViewLink>
+                        ))}
                       </div>
                     </div>
                     <div className="tooling-links">
@@ -203,6 +194,7 @@ export function ToolingCompatibilityTemplate() {
       <section aria-label="Bestehendes Framework-Mapping">
         <FrameworkTable />
       </section>
-    </main>
+      </main>
+    </PatternQuickViewProvider>
   );
 }
