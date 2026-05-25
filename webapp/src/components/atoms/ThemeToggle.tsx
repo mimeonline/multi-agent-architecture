@@ -3,35 +3,31 @@
 import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 
+type Theme = "light" | "dark";
+
 export function ThemeToggle() {
-  const [isDark, setIsDark] = useState(false);
+  const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
     const current = document.documentElement.getAttribute("data-theme");
-    setIsDark(current === "dark");
-
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = () => {
-      if (!localStorage.getItem("theme")) {
-        const dark = mq.matches;
-        setIsDark(dark);
-        document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
-      }
-    };
-    mq.addEventListener("change", handler);
-    return () => mq.removeEventListener("change", handler);
+    setTheme(current === "dark" ? "dark" : "light");
   }, []);
 
   function toggle() {
-    const next = !isDark;
-    setIsDark(next);
-    const theme = next ? "dark" : "light";
-    localStorage.setItem("theme", theme);
-    document.documentElement.setAttribute("data-theme", theme);
+    setTheme((current) => {
+      const active = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : current;
+      const next = active === "dark" ? "light" : "dark";
+      localStorage.setItem("theme", next);
+      document.documentElement.setAttribute("data-theme", next);
+      return next;
+    });
   }
+
+  const isDark = theme === "dark";
 
   return (
     <button
+      type="button"
       onClick={toggle}
       className="theme-toggle"
       aria-label={isDark ? "Zu Light Mode wechseln" : "Zu Dark Mode wechseln"}

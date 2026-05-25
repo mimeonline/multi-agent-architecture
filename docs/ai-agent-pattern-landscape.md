@@ -1038,6 +1038,134 @@ Abgrenzungskriterium: Ein Pattern gehört hierhin, wenn es eine Querschnittsfäh
 - Frameworks: LangSmith, OpenAI Evals, Microsoft Agent Framework, Google ADK, CrewAI Test Patterns, AutoGen / AG2.
 - Verwandt mit: Output Validation / Schema Enforcement für harte Checks, Distributed Tracing für Diagnose, Sandbox Execution für sichere Testläufe.
 
+### Goal Setting and Monitoring
+
+- Domäne: Systembetrieb
+- Subdomäne: Observability & Evaluation
+- Aliase: Objective Tracking, Goal Monitoring, Progress Monitoring
+- Kernidee: Ziele, Erfolgskriterien und Fortschritt werden explizit modelliert und während eines Agentenlaufs überwacht.
+- Einsetzen, wenn:
+  - Agenten über mehrere Schritte hinweg ein messbares Ziel verfolgen
+  - Fortschritt, Abbruchkriterien und Zielabweichungen sichtbar sein müssen
+  - Autonome Agenten nicht nur Aufgaben, sondern Outcomes steuern sollen
+- Nicht einsetzen, wenn:
+  - Die Aufgabe in einem einzelnen deterministischen Schritt lösbar ist
+  - Zielkriterien nicht operationalisierbar sind
+  - Monitoring nur zusätzliche Bürokratie erzeugt
+- Trade-off: Bessere Zieltreue gegen zusätzlichen Modellierungs- und Messaufwand.
+- Frameworks: LangGraph State, OpenAI Agents SDK Tracing, LangSmith, Google ADK, Microsoft Agent Framework.
+- Verwandt mit: Plan-and-Execute für Zielzerlegung, Distributed Tracing für Laufbeobachtung, LLM-as-Judge für qualitative Zielprüfung.
+
+### Exception Handling and Recovery
+
+- Domäne: Systembetrieb
+- Subdomäne: Runtime Architecture
+- Aliase: Error Recovery, Retry and Fallback, Failure Handling
+- Kernidee: Fehler werden als erwartbare Laufzeitzustände behandelt, mit Retry, Fallback, Eskalation oder kontrolliertem Abbruch.
+- Einsetzen, wenn:
+  - Tools, APIs oder Modelle temporär ausfallen können
+  - Agenten über mehrere Schritte hinweg robuste Recovery brauchen
+  - Externe Side Effects nicht doppelt oder inkonsistent ausgeführt werden dürfen
+- Nicht einsetzen, wenn:
+  - Fehler besser direkt sichtbar scheitern sollen
+  - Retry Nebenwirkungen mehrfach auslösen kann
+  - Fallbacks schlechtere Antworten als klare Fehlermeldungen erzeugen
+- Trade-off: Höhere Robustheit gegen komplexere Zustands- und Fehlerlogik.
+- Frameworks: LangGraph, Temporal, Durable Functions, Microsoft Agent Framework, AWS Step Functions.
+- Verwandt mit: Saga / Compensation für rückgängig machbare Side Effects, Checkpointing / Resumability für Wiederaufnahme, Human-in-the-Loop Approval Gate für Eskalation.
+
+### Resource-Aware Optimization
+
+- Domäne: Systembetrieb
+- Subdomäne: Runtime Architecture
+- Aliase: Budget-Aware Execution, Resource-Aware Scheduling, Cost-Latency Optimization
+- Kernidee: Modellwahl, Tool-Nutzung, Parallelität und Abbruch werden an verfügbare Ressourcen wie Budget, Latenz, Tokens, Quoten oder Rechenzeit gekoppelt.
+- Einsetzen, wenn:
+  - Agenten unter Kosten-, Latenz- oder Quotenlimits laufen
+  - Mehrere Tasks um knappe Ressourcen konkurrieren
+  - Modell- und Tool-Auswahl dynamisch optimiert werden soll
+- Nicht einsetzen, wenn:
+  - Ressourcen praktisch unbegrenzt oder irrelevant sind
+  - Optimierungslogik die eigentliche Aufgabe überlagert
+  - Messdaten zu ungenau für Entscheidungen sind
+- Trade-off: Effizienterer Betrieb gegen zusätzliche Steuerungslogik und mögliche Qualitätsverluste.
+- Frameworks: LangGraph, LangSmith, OpenAI Usage APIs, Google Cloud Monitoring, AWS Cost and Usage Integrationen.
+- Verwandt mit: Token / Cost Tracking als Messgrundlage, Market-based für Allokation, ReWOO für Call-Reduktion.
+
+### Prioritization
+
+- Domäne: Systembetrieb
+- Subdomäne: Runtime Architecture
+- Aliase: Task Prioritization, Priority Queue, Importance Scheduling
+- Kernidee: Aufgaben werden nach Wichtigkeit, Deadline, Risiko, Nutzerwert oder Abhängigkeiten geordnet, bevor Agenten oder Tools sie bearbeiten.
+- Einsetzen, wenn:
+  - Mehrere Aufgaben gleichzeitig anstehen
+  - Dringlichkeit, Risiko oder Geschäftswert unterschiedlich sind
+  - Agenten Arbeitspakete unter Ressourcenknappheit wählen müssen
+- Nicht einsetzen, wenn:
+  - Aufgaben strikt sequenziell oder gleichwertig sind
+  - Prioritätsregeln politisch oder fachlich ungeklärt sind
+  - Falsche Priorisierung schwerer wiegt als einfache FIFO-Verarbeitung
+- Trade-off: Bessere Ressourcennutzung gegen Prioritätsbias und Regelpflege.
+- Frameworks: Queue-Systeme, LangGraph State, CrewAI Processes, Microsoft Agent Framework, AWS Step Functions.
+- Verwandt mit: Resource-Aware Optimization als Optimierungsrahmen, Market-based als ökonomische Variante, Orchestrator-Workers für Aufgabenverteilung.
+
+### Learning and Adaptation
+
+- Domäne: Systembetrieb
+- Subdomäne: Observability & Evaluation
+- Aliase: Feedback Adaptation, Continuous Improvement, Adaptive Agent
+- Kernidee: Feedback aus Nutzerreaktionen, Bewertungen, Traces oder Fehlern wird genutzt, um Prompts, Policies, Memories oder Routing über Zeit anzupassen.
+- Einsetzen, wenn:
+  - Agenten wiederholt ähnliche Aufgaben bearbeiten
+  - Feedback systematisch verfügbar und auswertbar ist
+  - Anpassungen kontrolliert ausgerollt und geprüft werden können
+- Nicht einsetzen, wenn:
+  - Feedback verrauscht, manipulativ oder nicht repräsentativ ist
+  - Änderungen ungeprüft produktive Agenten beeinflussen
+  - Compliance stabile, nachvollziehbare Policies verlangt
+- Trade-off: Kontinuierliche Verbesserung gegen Drift, Governance-Aufwand und Regressionsrisiko.
+- Frameworks: LangSmith Datasets, OpenAI Evals, Memory Stores, Feature Flags, Experiment-Plattformen.
+- Verwandt mit: Reflexion als kurzfristige Selbstverbesserung, LLM-as-Judge als Feedbackquelle, Integration Tests für Agents als Regressionsschutz.
+
+### Exploration and Discovery
+
+- Domäne: Systembetrieb
+- Subdomäne: Runtime Architecture
+- Aliase: Autonomous Discovery, Search and Explore, Hypothesis Exploration
+- Kernidee: Ein Agent erkundet Lösungsräume, Datenquellen oder Hypothesen aktiv, statt nur einem vorgegebenen Plan zu folgen.
+- Einsetzen, wenn:
+  - Der Lösungsraum unklar oder offen ist
+  - Neue Optionen, Quellen oder Strategien gefunden werden sollen
+  - Exploration durch Budgets, Stop-Kriterien und Bewertung kontrolliert werden kann
+- Nicht einsetzen, wenn:
+  - Eine bekannte Pipeline zuverlässig ausreicht
+  - Exploration unkontrollierte Kosten oder Seiteneffekte erzeugt
+  - Ergebnisse ohne Bewertung nicht verwertbar sind
+- Trade-off: Mehr Lösungsabdeckung gegen höhere Kosten und schwerere Reproduzierbarkeit.
+- Frameworks: LangGraph, AutoGen / AG2, Google ADK Composite Patterns, CrewAI.
+- Verwandt mit: Tree of Thoughts für Reasoning-Suche, Swarm für dezentrale Exploration, LLM-as-Judge für Bewertung.
+
+### Inter-Agent Communication (A2A)
+
+- Domäne: Systembetrieb
+- Subdomäne: Runtime Architecture
+- Aliase: Agent-to-Agent Communication, A2A Messaging, Agent Protocol
+- Kernidee: Agenten tauschen Nachrichten, Fähigkeiten, Status und Ergebnisse über explizite Kommunikationsprotokolle statt impliziter Prompt-Konventionen aus.
+- Einsetzen, wenn:
+  - Agenten organisations-, prozess- oder systemübergreifend kooperieren
+  - Nachrichtenformate, Identität und Fähigkeiten vertraglich stabil sein müssen
+  - Interoperabilität wichtiger als eine einzelne Framework-Implementierung ist
+- Nicht einsetzen, wenn:
+  - Agenten nur innerhalb eines lokalen Workflows laufen
+  - Ein einfacher Graph oder Supervisor genügt
+  - Protokollaufwand mehr Komplexität als Nutzen erzeugt
+- Trade-off: Interoperabilität und Entkopplung gegen Protokoll-, Sicherheits- und Versionierungsaufwand.
+- Frameworks: Google A2A, MCP in Kombination mit Agent-Runtime, Microsoft Agent Framework, LangGraph über Custom Channels.
+- Verwandt mit: Pub/Sub Agent Mesh für Transport, Group Chat für einfache Konversation, Blackboard für Shared-State-Kommunikation.
+
+> Hinweis: Die Pattern-Liste wurde nach der vorhandenen Infografik erweitert. `docs/ai-agen-pattern-landscape.png`, die Webapp-Kopie und die Präsentationsgrafik müssen nachgezogen werden, sobald die neue Taxonomie visuell final ist.
+
 ## 🗺️ Querschnittssicht 1: Framework-Mapping
 
 | Framework | Native Patterns | Stärke | Schwäche |

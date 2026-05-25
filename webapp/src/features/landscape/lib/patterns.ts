@@ -1742,6 +1742,212 @@ def llm_call(*a, **kw):
       { name: "Distributed Tracing", kind: "combines", note: "Tests produzieren Traces." },
     ],
   }),
+  p({
+    name: "Goal Setting and Monitoring",
+    domain: "Systembetrieb",
+    aliases: ["Objective Tracking", "Goal Monitoring", "Progress Monitoring"],
+    idea: "Ziele, Erfolgskriterien und Fortschritt werden explizit modelliert und während eines Agentenlaufs überwacht. Der Agent arbeitet nicht nur eine Task-Liste ab, sondern prüft laufend, ob er dem Outcome näherkommt. Besonders wichtig bei autonomen Runs, die sonst lange in plausibel wirkenden Nebenzielen verschwinden.",
+    useWhen: ["Agenten messbare Ziele verfolgen", "Fortschritt sichtbar sein muss", "Abbruchkriterien definiert werden sollen"],
+    avoidWhen: ["Ein einzelner Schritt reicht", "Zielkriterien vage bleiben", "Monitoring nur Overhead erzeugt"],
+    tradeoff: "Zieltreue gegen Modellierungsaufwand.",
+    frameworks: ["LangGraph", "OpenAI Agents SDK", "LangSmith"],
+    subdomain: "Observability & Evaluation",
+    icon: "ListChecks",
+    complexity: "Fortgeschritten",
+    traits: ["Erklärbar", "Production"],
+    scenario:
+      "Ein Research-Agent verfolgt Ziel, offene Fragen und Evidenzabdeckung. Sobald die Abdeckung stagniert, wird gestoppt oder replanned.",
+    diagram: { type: "loop", nodes: ["Goal", "Agent", "Progress Check", "Continue / Stop"], caption: "Zielzustand + Fortschrittsprüfung." },
+    code: {
+      framework: "LangGraph",
+      language: "python",
+      snippet: `state.goal = "Belege für These finden"
+state.progress = score_progress(state)
+if state.progress < MIN_DELTA:
+  return replan_or_stop(state)`,
+    },
+    related: [
+      { name: "Plan-and-Execute", kind: "combines", note: "Pläne werden an messbaren Zielen ausgerichtet." },
+      { name: "Distributed Tracing", kind: "combines", note: "Traces liefern Fortschrittsdaten." },
+      { name: "LLM-as-Judge", kind: "combines", note: "Qualitative Ziele brauchen oft einen Judge." },
+    ],
+  }),
+  p({
+    name: "Exception Handling and Recovery",
+    domain: "Systembetrieb",
+    aliases: ["Error Recovery", "Retry and Fallback", "Failure Handling"],
+    idea: "Fehler werden als erwartbare Laufzeitzustände behandelt: Retry bei temporären Ausfällen, Fallback bei dauerhaftem Fehler, Eskalation bei Risiko und kontrollierter Abbruch bei unsicherem Zustand. Entscheidend ist Idempotenz, sonst macht ein gut gemeinter Retry dieselbe externe Aktion zweimal. Das Pattern macht Agenten weniger fragil, erhöht aber den Zustandsaufwand.",
+    useWhen: ["Tools oder APIs ausfallen können", "Multi-Step-Läufe robust sein müssen", "Side Effects geschützt werden müssen"],
+    avoidWhen: ["Fehler direkt sichtbar sein sollen", "Retry Nebenwirkungen dupliziert", "Fallback schlechter als klares Scheitern ist"],
+    tradeoff: "Robustheit gegen komplexere Fehlerlogik.",
+    frameworks: ["LangGraph", "Temporal", "AWS Step Functions"],
+    subdomain: "Runtime Architecture",
+    icon: "Repeat",
+    complexity: "Production",
+    traits: ["Robustheit", "Production"],
+    scenario:
+      "Ein Zahlungs-Tool liefert Timeout. Der Agent prüft die Idempotency-Key-Historie, wiederholt einmal und eskaliert danach an einen Menschen.",
+    diagram: { type: "gate", nodes: ["Action", "Error?", "Retry", "Fallback / Escalate"], caption: "Fehlerpfade als Teil des Designs." },
+    code: {
+      framework: "LangGraph",
+      language: "python",
+      snippet: `try:
+  return call_tool(idempotency_key=key)
+except Timeout:
+  return retry_once_or_escalate(key)`,
+    },
+    related: [
+      { name: "Saga / Compensation", kind: "combines", note: "Recovery für Side Effects braucht Kompensation." },
+      { name: "Checkpointing / Resumability", kind: "combines", note: "Wiederaufnahme startet vom letzten sicheren Zustand." },
+    ],
+  }),
+  p({
+    name: "Resource-Aware Optimization",
+    domain: "Systembetrieb",
+    aliases: ["Budget-Aware Execution", "Resource-Aware Scheduling", "Cost-Latency Optimization"],
+    idea: "Modellwahl, Tool-Nutzung, Parallelität und Abbruch werden an verfügbare Ressourcen wie Budget, Latenz, Tokens, Quoten oder Rechenzeit gekoppelt. Ein Agent darf dann zum Beispiel erst ein kleines Modell versuchen, bei hoher Unsicherheit eskalieren und bei Budgetdruck abbrechen. Gut für Produktion, gefährlich wenn Sparlogik Qualität unbemerkt wegoptimiert.",
+    useWhen: ["Kosten oder Latenz begrenzt sind", "Mehrere Tasks Ressourcen teilen", "Modell- und Tool-Auswahl dynamisch sein soll"],
+    avoidWhen: ["Ressourcen irrelevant sind", "Optimierung die Aufgabe überlagert", "Messdaten zu ungenau sind"],
+    tradeoff: "Effizienz gegen Steuerungslogik und Qualitätsrisiko.",
+    frameworks: ["LangGraph", "LangSmith", "OpenAI Usage APIs"],
+    subdomain: "Runtime Architecture",
+    icon: "Cpu",
+    complexity: "Production",
+    traits: ["Cost-bewusst", "Production"],
+    scenario:
+      "Ein Support-Agent startet mit einem günstigen Modell, nutzt Retrieval nur bei Wissenslücken und stoppt teure Exploration bei erreichtem Confidence-Ziel.",
+    diagram: { type: "gate", nodes: ["Task", "Budget Check", "Cheap Path", "Escalate / Stop"], caption: "Ressourcen steuern den Pfad." },
+    code: {
+      framework: "LangGraph",
+      language: "python",
+      snippet: `if budget.remaining < 0.05:
+  return concise_answer()
+model = choose_model(latency_sla, confidence)
+return run(model)`,
+    },
+    related: [
+      { name: "Token / Cost Tracking", kind: "combines", note: "Tracking liefert die Messdaten." },
+      { name: "Market-based", kind: "similar", note: "Market-based verteilt Ressourcen über Preise." },
+      { name: "ReWOO", kind: "combines", note: "Vorabplanung reduziert Tool-Calls." },
+    ],
+  }),
+  p({
+    name: "Prioritization",
+    domain: "Systembetrieb",
+    aliases: ["Task Prioritization", "Priority Queue", "Importance Scheduling"],
+    idea: "Aufgaben werden nach Wichtigkeit, Deadline, Risiko, Nutzerwert oder Abhängigkeiten geordnet, bevor Agenten oder Tools sie bearbeiten. Das Pattern sitzt eine Ebene über normaler Task-Ausführung und entscheidet, was zuerst Aufmerksamkeit bekommt. Falsch gewählte Prioritätsregeln können aber leise ganze Nutzergruppen oder Task-Klassen benachteiligen.",
+    useWhen: ["Mehrere Aufgaben gleichzeitig anstehen", "Dringlichkeit unterschiedlich ist", "Ressourcen knapp sind"],
+    avoidWhen: ["Aufgaben gleichwertig sind", "Prioritätsregeln ungeklärt sind", "FIFO transparenter und fairer ist"],
+    tradeoff: "Bessere Ressourcennutzung gegen Bias und Regelpflege.",
+    frameworks: ["Queue-Systeme", "LangGraph", "CrewAI"],
+    subdomain: "Runtime Architecture",
+    icon: "ListChecks",
+    complexity: "Fortgeschritten",
+    traits: ["Kontrollierbar", "Production"],
+    scenario:
+      "Ein Incident-Agent bearbeitet erst sicherheitskritische Tickets, dann SLA-nahe Fälle und zuletzt normale Anfragen.",
+    diagram: { type: "branch", nodes: ["Queue", "P1", "P2", "P3"], caption: "Priorität bestimmt Ausführungsreihenfolge." },
+    code: {
+      framework: "pseudo",
+      language: "pseudo",
+      snippet: `tasks.sort_by(priority, deadline, risk)
+for task in tasks:
+  dispatch(task)`,
+    },
+    related: [
+      { name: "Resource-Aware Optimization", kind: "combines", note: "Priorität steuert knappe Ressourcen." },
+      { name: "Market-based", kind: "similar", note: "Marktmechanik ist eine dynamische Priorisierung." },
+    ],
+  }),
+  p({
+    name: "Learning and Adaptation",
+    domain: "Systembetrieb",
+    aliases: ["Feedback Adaptation", "Continuous Improvement", "Adaptive Agent"],
+    idea: "Feedback aus Nutzerreaktionen, Bewertungen, Traces oder Fehlern wird genutzt, um Prompts, Policies, Memories oder Routing über Zeit anzupassen. Wichtig ist die Trennung zwischen Lernen als kontrollierter Produktprozess und unkontrolliertem Selbstumschreiben im laufenden Betrieb. Ohne Evaluation und Rollback wird Anpassung schnell zu Drift.",
+    useWhen: ["Ähnliche Aufgaben wiederkehren", "Feedback systematisch verfügbar ist", "Änderungen geprüft ausgerollt werden können"],
+    avoidWhen: ["Feedback verrauscht ist", "Änderungen ungeprüft produktiv wirken", "Stabile Policies wichtiger sind"],
+    tradeoff: "Verbesserung über Zeit gegen Drift und Governance-Aufwand.",
+    frameworks: ["LangSmith", "OpenAI Evals", "Feature Flags"],
+    subdomain: "Observability & Evaluation",
+    icon: "Sparkles",
+    complexity: "Production",
+    traits: ["Adaptiv", "Production"],
+    scenario:
+      "Aus Support-Transkripten werden wiederkehrende Fehlroutings erkannt, als Eval-Datensatz gesichert und danach die Routing-Prompts angepasst.",
+    diagram: { type: "loop", nodes: ["Run", "Feedback", "Eval", "Update"], caption: "Feedback wird kontrolliert in Änderungen überführt." },
+    code: {
+      framework: "LangSmith",
+      language: "python",
+      snippet: `dataset.add(failed_case)
+if evals.pass_rate(new_prompt) > baseline:
+  rollout(new_prompt)`,
+    },
+    related: [
+      { name: "Reflexion", kind: "contrasts", note: "Reflexion verbessert innerhalb eines Laufs." },
+      { name: "Integration Tests für Agents", kind: "combines", note: "Tests verhindern Regressionen." },
+      { name: "LLM-as-Judge", kind: "combines", note: "Judges können Feedback skalieren." },
+    ],
+  }),
+  p({
+    name: "Exploration and Discovery",
+    domain: "Systembetrieb",
+    aliases: ["Autonomous Discovery", "Search and Explore", "Hypothesis Exploration"],
+    idea: "Ein Agent erkundet Lösungsräume, Datenquellen oder Hypothesen aktiv, statt nur einem vorgegebenen Plan zu folgen. Das ist hilfreich, wenn noch unklar ist, welche Quelle, Strategie oder Zerlegung trägt. Es braucht harte Budgets und Bewertungsstopps, weil Exploration sonst endlos interessant bleibt.",
+    useWhen: ["Der Lösungsraum unklar ist", "Neue Quellen oder Strategien gesucht werden", "Exploration kontrolliert bewertet wird"],
+    avoidWhen: ["Eine bekannte Pipeline reicht", "Kosten oder Side Effects unkontrolliert wären", "Bewertung fehlt"],
+    tradeoff: "Mehr Lösungsabdeckung gegen Kosten und Reproduzierbarkeit.",
+    frameworks: ["LangGraph", "AutoGen / AG2", "Google ADK"],
+    subdomain: "Runtime Architecture",
+    icon: "Search",
+    complexity: "Fortgeschritten",
+    traits: ["Adaptiv", "Token-hungry"],
+    scenario:
+      "Ein Research-Agent bildet drei Hypothesen, sucht je Hypothese Evidenz und beendet die Exploration, wenn kein Pfad neue Belege liefert.",
+    diagram: { type: "tree", nodes: ["Problem", "Hypothese A", "Hypothese B", "Hypothese C"], caption: "Kontrollierte Suche im Lösungsraum." },
+    code: {
+      framework: "LangGraph",
+      language: "python",
+      snippet: `frontier = seed_hypotheses(problem)
+while budget.ok() and frontier:
+  expand(best(frontier))
+  prune(low_value_paths)`,
+    },
+    related: [
+      { name: "Tree of Thoughts", kind: "similar", note: "Tree of Thoughts ist Reasoning-Suche." },
+      { name: "Swarm", kind: "combines", note: "Swarm kann Exploration dezentral verteilen." },
+    ],
+  }),
+  p({
+    name: "Inter-Agent Communication (A2A)",
+    domain: "Systembetrieb",
+    aliases: ["Agent-to-Agent Communication", "A2A Messaging", "Agent Protocol"],
+    idea: "Agenten tauschen Nachrichten, Fähigkeiten, Status und Ergebnisse über explizite Kommunikationsprotokolle statt impliziter Prompt-Konventionen aus. Das Pattern wird wichtig, sobald Agenten über Prozess-, Team- oder Organisationsgrenzen hinweg kooperieren. Es löst Interoperabilität, bringt aber Versionierung, Identität und Sicherheitsfragen mit.",
+    useWhen: ["Agenten systemübergreifend kooperieren", "Nachrichtenformate stabil sein müssen", "Interoperabilität wichtig ist"],
+    avoidWhen: ["Ein lokaler Workflow genügt", "Supervisor oder Graph einfacher ist", "Protokollaufwand keinen Nutzen bringt"],
+    tradeoff: "Interoperabilität gegen Protokoll- und Sicherheitsaufwand.",
+    frameworks: ["Google A2A", "MCP", "Microsoft Agent Framework"],
+    subdomain: "Runtime Architecture",
+    icon: "Network",
+    complexity: "Production",
+    traits: ["Multi-Agent", "Async", "Production"],
+    scenario:
+      "Ein Einkaufs-Agent fragt einen Lieferanten-Agent nach Verfügbarkeit, Preis und Lieferzeit über ein versioniertes Nachrichtenformat.",
+    diagram: { type: "mesh", nodes: ["Agent A", "A2A Protocol", "Agent B", "Agent C"], caption: "Explizite Kommunikation zwischen Agenten." },
+    code: {
+      framework: "pseudo",
+      language: "pseudo",
+      snippet: `message = A2A.request(
+  capability="quote",
+  payload={"sku": sku}
+)
+send(agent_b, message)`,
+    },
+    related: [
+      { name: "Pub/Sub Agent Mesh", kind: "combines", note: "Pub/Sub kann A2A transportieren." },
+      { name: "Group Chat", kind: "contrasts", note: "Group Chat ist informeller und konversationszentriert." },
+      { name: "Blackboard", kind: "contrasts", note: "Blackboard kommuniziert über Shared State." },
+    ],
+  }),
 ];
 
 export const allPatterns = [...patterns, ...systemPatterns];

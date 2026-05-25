@@ -6,7 +6,7 @@ Jede Demo hat einen deterministischen Offline-Fallback. Dadurch bleibt die Suite
 
 ## Enthaltene Patterns
 
-Die Suite stellt Demos für alle Patterns aus der Landscape bereit:
+Die Suite stellt Demos für die zentralen Patterns aus der Landscape bereit. Neuere Systembetrieb-Patterns können zunächst als Architekturskizze im Atlas dokumentiert sein, bevor sie eine eigene CLI-Demo bekommen:
 
 - Denken: ReAct, Plan-and-Execute, ReWOO, Reflexion, Tree of Thoughts, Self-Consistency, CodeAct
 - Ablauf: Sequential Pipeline, Routing, Parallelization, Loop, Evaluator-Optimizer, Iterative Refinement, Orchestrator-Workers, Map-Reduce

@@ -6,7 +6,7 @@ Eine architecture-first Knowledge Platform für robuste AI-Systeme. Das Projekt 
 
 - `docs/ai-systems-atlas-product-architecture.md`: Produkt- und Refactoring-Rahmen für den AI Systems Atlas
 - `docs/ai-agent-pattern-landscape.md`: ausführliches deutsches Referenzmodell mit vier Domänen und zwei Querschnittssichten
-- `docs/ai-agen-pattern-landscape.png`: Infografik zur Pattern Landscape
+- `docs/ai-agen-pattern-landscape.png`: Infografik zur Pattern Landscape, nach Pattern-Erweiterungen neu zu bauen
 - `presentation/`: Reveal.js Präsentation für Talks, Workshops und Veröffentlichungen
 - `code/`: praktische Python-Demos mit LangChain, LangGraph, LangSmith und Deep Agents
 - `webapp/`: interaktive Atlas-Webapp mit Foundations, Patterns, Architecture, Governance, Decision Guides, Reference Architectures, Implementation Lab und Tooling Compatibility
