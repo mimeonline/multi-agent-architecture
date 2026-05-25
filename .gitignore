@@ -44,10 +44,10 @@ pnpm-debug.log*
 
 # Local browser verification artifacts
 .playwright-mcp/
+playwright/
 playwright-report/
 test-results/
 *-full.png
-/*.png
 
 # Local package manager cache
 .npm-cache/
